@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - 全局进度与时间轴{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1>⏱️ {{ project.name }} - 全局进度追踪</h1>
+    <p>实时监控项目健康度，对比计划用时与实际用时（Gantt 简易视图）。</p>
+
+    <!-- 返回看板的快捷按钮 -->
+    <a href="/" class="btn sm"
+        style="background:#e2e8f0; color:#334155; text-decoration:none; margin-top:10px; display:inline-block;">&larr;
+        返回工作台</a>
+</div>
+
+<!-- ============================================== -->
+<!-- 1. 全局大盘进度条 (Master Progress Bar)          -->
+<!-- ============================================== -->
+<div class="card" style="margin-bottom: 30px;">
+    <h2 class="card-title">🌈 总体进度核算</h2>
+    <p style="color:#64748b; font-size:0.9rem; margin-bottom:15px;">
+        说明：总体进度基于 **“任务难度/工时估算分 (Estimated Hours)”** 加权计算。啃掉一块硬骨头，进度涨得更快！
+    </p>
+
+    <div class="progress-bar-container"
+        style="background:#e2e8f0; height:30px; border-radius:15px; overflow:hidden; position:relative;">
+        <!-- 百分比宽度的彩色条 -->
+        <div class="progress-bar-fill"
+            style="width: {{ master_progress_percentage }}%; background: linear-gradient(90deg, #10b981, #3b82f6); height: 100%; transition: width 1s ease-in-out;">
+        </div>
+        <!-- 居中显示的文字 -->
+        <div
+            style="position:absolute; top:0; left:0; width:100%; text-align:center; line-height:30px; font-weight:bold; color: {% if master_progress_percentage > 50 %}white{% else %}#1e293b{% endif %}; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+            当前进度：{{ "%.1f"|format(master_progress_percentage) }} %
+        </div>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; margin-top:10px; font-size:0.85rem; color:#64748b;">
+        <span>已完成工时分：{{ "%.1f"|format(completed_hours) }}h</span>
+        <span>总工时分池：{{ "%.1f"|format(total_hours) }}h</span>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- 2. 模块精细时间轴 (Gantt-like Timeline)          -->
+<!-- ============================================== -->
+<div class="card">
+    <h2 class="card-title">📊 各模块 [计划 vs 实际] 对比图</h2>
+
+    <div class="timeline-container" style="margin-top: 25px;">
+        {% for info in timeline_data %}
+        <div class="timeline-row" style="margin-bottom: 25px; border-bottom:1px dashed #e2e8f0; padding-bottom:20px;">
+
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span style="font-weight:600;">{{ info.module.name }}</span>
+                <span class="status-badge 
+                    {% if info.module.status == '已完成' %}done
+                    {% elif info.module.status == '待分配' %}pending
+                    {% elif info.module.status == '审核中' %}review
+                    {% else %}active{% endif %}">
+                    {{ info.module.status }}
+                </span>
+            </div>
+
+            <div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">
+                负责人：{{ info.member_name }}
+            </div>
+
+            <!-- 计划条 -->
+            <div style="display:flex; align-items:center; margin-bottom:8px;">
+                <div style="width: 80px; font-size:0.8rem; color:#64748b;">🎯 计划额度</div>
+                <div style="flex-grow:1; background:#f1f5f9; height:12px; border-radius:6px; overflow:hidden;">
+                    <!-- 如果总额度最大是 50，我们按比例放大显示 (防止太短看不见) -->
+                    {% set max_limit = 50.0 %}
+                    {% set plan_width = (info.planned_hours / max_limit * 100) %}
+                    {% if plan_width > 100 %}{% set plan_width = 100 %}{% endif %}
+
+                    <div style="width: {{ plan_width }}%; height:100%; background:#94a3b8;"></div>
+                </div>
+                <div style="width: 50px; text-align:right; font-size:0.8rem;">{{ "%.1f"|format(info.planned_hours) }}h
+                </div>
+            </div>
+
+            <!-- 实际条 -->
+            <div style="display:flex; align-items:center;">
+                <div style="width: 80px; font-size:0.8rem; color:#64748b;">🏃 实际耗时</div>
+                <div style="flex-grow:1; background:#f1f5f9; height:12px; border-radius:6px; overflow:hidden;">
+                    {% set actual_width = (info.actual_hours / max_limit * 100) %}
+                    {% if actual_width > 100 %}{% set actual_width = 100 %}{% endif %}
+
+                    <!-- 动态颜色：如果实际超过了计划，变成醒目的红色警告，否则是健康的绿色 -->
+                    {% set bar_color = '#10b981' %}
+                    {% if info.actual_hours > info.planned_hours and info.planned_hours > 0 %}
+                    {% set bar_color = '#ef4444' %}
+                    {% endif %}
+
+                    <div style="width: {{ actual_width }}%; height:100%; background:{{ bar_color }};"></div>
+                </div>
+                <div style="width: 50px; text-align:right; font-size:0.8rem;">
+                    {% if info.actual_hours > 0 %}
+                    <span style="color:{{ bar_color }}; font-weight:bold;">{{ "%.1f"|format(info.actual_hours)
+                        }}h</span>
+                    {% else %}
+                    0.0h
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+        {% else %}
+        <div class="empty-state">
+            该项目还没有创建任何模块。
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

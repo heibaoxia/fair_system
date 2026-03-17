@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Fair-System{% endblock %}</title>
+
+    <!-- Google Fonts Preconnect -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Global Stylesheet -->
+    <link rel="stylesheet" href="/static/style.css">
+
+    <!-- SortableJS for drag-and-drop features -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+    {% block extra_css %}{% endblock %}
+    <style>
+        .sidebar-link-main {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .sidebar-link-with-badge {
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .nav-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 6px;
+            border-radius: 999px;
+            background: #dc2626;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .nav-badge[hidden] {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+
+        <!-- ===================== Sidebar Navigation ===================== -->
+        <aside class="sidebar" id="app-sidebar">
+            <div class="sidebar-logo">
+                Fair-<span>System</span>
+            </div>
+
+            <nav class="sidebar-nav" id="sidebar-nav">
+                <a href="/" class="sidebar-link" data-path="/">
+                    <span class="sidebar-link-main"><span class="nav-icon">🏠</span><span>首页</span></span>
+                </a>
+                <a href="/members" class="sidebar-link" data-path="/members">
+                    <span class="sidebar-link-main"><span class="nav-icon">👥</span><span>成员管理</span></span>
+                </a>
+                <a href="/overview" class="sidebar-link" data-path="/overview">
+                    <span class="sidebar-link-main"><span class="nav-icon">📊</span><span>项目总览</span></span>
+                </a>
+                <a href="/todo" class="sidebar-link sidebar-link-with-badge" data-path="/todo">
+                    <span class="sidebar-link-main"><span class="nav-icon">📋</span><span>我的待办</span></span>
+                    <span id="todo-nav-badge" class="nav-badge" hidden aria-label="待办项目数"></span>
+                </a>
+            </nav>
+
+            <!-- Identity Switcher (bottom of sidebar) -->
+            <div class="sidebar-identity"
+                style="margin-top: auto; padding-top: 1.5rem; border-top: 1px solid var(--border-light);">
+                <label for="global-identity-selector"
+                    style="display:block; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
+                    当前视角
+                </label>
+                <select id="global-identity-selector" onchange="switchIdentity(this.value)" class="input-field"
+                    style="font-size: 0.875rem; padding: 0.5rem 0.75rem; border-radius: var(--radius-md); cursor: pointer;">
+                    <option value="">加载中...</option>
+                </select>
+            </div>
+        </aside>
+
+        <!-- ===================== Main Content Area ===================== -->
+        <div class="main-content">
+            {% block content %}{% endblock %}
+        </div>
+
+    </div><!-- /.app-container -->
+
+    <!-- ===================== Toast Notification Container ===================== -->
+    <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+    <!-- ===================== Global JS ===================== -->
+    <script>
+        // -----------------------------------------------
+        // Toast Notification
+        // -----------------------------------------------
+        function showToast(message, isError = false) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+
+            // Determine type class
+            const typeClass = isError ? 'error' : 'success';
+            const icon = isError ? '✕' : '✓';
+
+            toast.className = `toast ${typeClass}`;
+            toast.innerHTML = `<strong style="margin-right: 8px;">${icon}</strong> ${message}`;
+
+            container.appendChild(toast);
+
+            // Trigger slide-in animation
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => toast.classList.add('show'));
+            });
+
+            // Auto-remove after 3.5 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+            }, 3500);
+        }
+
+        function formatApiErrorDetail(detail) {
+            if (!detail) {
+                return '';
+            }
+            if (typeof detail === 'string') {
+                return detail;
+            }
+            if (Array.isArray(detail)) {
+                return detail.map((item) => {
+                    if (typeof item === 'string') {
+                        return item;
+                    }
+                    if (item && typeof item === 'object') {
+                        const location = Array.isArray(item.loc) ? item.loc.join('.') : '';
+                        if (item.msg && location) {
+                            return `${location}: ${item.msg}`;
+                        }
+                        if (item.msg) {
+                            return item.msg;
+                        }
+                    }
+                    return String(item);
+                }).join('；');
+            }
+            if (typeof detail === 'object') {
+                return detail.message || detail.detail || JSON.stringify(detail);
+            }
+            return String(detail);
+        }
+
+        function getApiErrorMessage(data, fallbackMessage) {
+            if (!data) {
+                return fallbackMessage;
+            }
+            return formatApiErrorDetail(data.detail || data.message || data) || fallbackMessage;
+        }
+
+        // -----------------------------------------------
+        // Sidebar Active Link Highlighting
+        // -----------------------------------------------
+        function highlightActiveNav() {
+            const currentPath = window.location.pathname;
+            const links = document.querySelectorAll('#sidebar-nav .sidebar-link');
+
+            links.forEach(link => {
+                const linkPath = link.getAttribute('data-path');
+
+                // Exact match for root, prefix match for others
+                const isActive = linkPath === '/'
+                    ? currentPath === '/'
+                    : currentPath.startsWith(linkPath);
+
+                if (isActive) {
+                    link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
+                }
+            });
+        }
+
+        // -----------------------------------------------
+        // Global Identity Management
+        // -----------------------------------------------
+        let pendingBadgeRequestToken = 0;
+
+        async function loadGlobalIdentities() {
+            try {
+                const res = await fetch('/members/');
+                const members = await res.json();
+                const selector = document.getElementById('global-identity-selector');
+                selector.innerHTML = '';
+
+                const godOption = document.createElement('option');
+                godOption.value = '0';
+                godOption.textContent = '上帝（超级管理）';
+                selector.appendChild(godOption);
+
+                let savedId = localStorage.getItem('current_member_id');
+                let foundSaved = savedId === '0';
+
+                if (savedId === '0') {
+                    godOption.selected = true;
+                }
+
+                members.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.textContent = `${m.name}（${m.role || '成员'}）`;
+                    selector.appendChild(opt);
+
+                    if (savedId && savedId == m.id) {
+                        opt.selected = true;
+                        foundSaved = true;
+                    }
+                });
+
+                // Default to first member if no saved identity found
+                if (!foundSaved && members.length > 0) {
+                    selector.selectedIndex = 0;
+                    switchIdentity(members[0].id, members[0].name);
+                    return;
+                }
+
+                syncTodoLinks();
+                loadPendingTodoBadge();
+            } catch (err) {
+                console.error('无法加载成员身份列表', err);
+            }
+        }
+
+        function switchIdentity(memberId, memberName) {
+            if (memberId === null || memberId === undefined || memberId === '') return;
+            const normalizedMemberId = String(memberId);
+            localStorage.setItem('current_member_id', normalizedMemberId);
+
+            const selector = document.getElementById('global-identity-selector');
+            const name = memberName || selector.options[selector.selectedIndex]?.text;
+            if (name) localStorage.setItem('current_member_name', name);
+
+            showToast(`已切换视角：${name || memberId}`);
+
+            syncTodoLinks();
+            loadPendingTodoBadge();
+
+            // Reload after a short delay so the toast is visible
+            if (window.location.pathname === '/todo') {
+                setTimeout(() => {
+                    window.location.href = `/todo?member_id=${normalizedMemberId}`;
+                }, 600);
+                return;
+            }
+
+            if (!memberName) {
+                setTimeout(() => window.location.reload(), 600);
+            }
+        }
+
+        function getCurrentMemberId() {
+            const rawValue = localStorage.getItem('current_member_id');
+            if (rawValue === null || rawValue === '') {
+                return null;
+            }
+
+            const parsed = parseInt(rawValue, 10);
+            return Number.isNaN(parsed) ? null : parsed;
+        }
+
+        function syncTodoLinks() {
+            const currentMemberId = getCurrentMemberId();
+            document.querySelectorAll('a[href="/todo"], a[data-path="/todo"]').forEach((link) => {
+                link.href = currentMemberId !== null ? `/todo?member_id=${currentMemberId}` : '/todo';
+            });
+        }
+
+        function isGodMode() {
+            return getCurrentMemberId() === 0;
+        }
+
+        async function loadPendingTodoBadge() {
+            const badge = document.getElementById('todo-nav-badge');
+            if (!badge) {
+                return;
+            }
+
+            const currentMemberId = getCurrentMemberId();
+            if (currentMemberId === null || currentMemberId <= 0) {
+                badge.hidden = true;
+                badge.textContent = '';
+                return;
+            }
+
+            const requestToken = ++pendingBadgeRequestToken;
+
+            try {
+                const response = await fetch(`/notifications/pending-assessments/${currentMemberId}`);
+                if (!response.ok) {
+                    throw new Error('failed to load notifications');
+                }
+
+                const data = await response.json();
+                if (requestToken !== pendingBadgeRequestToken || getCurrentMemberId() !== currentMemberId) {
+                    return;
+                }
+
+                const count = Number(data.pending_project_count || 0);
+                badge.hidden = count <= 0;
+                badge.textContent = count > 0 ? String(count) : '';
+            } catch (error) {
+                if (requestToken !== pendingBadgeRequestToken) {
+                    return;
+                }
+                badge.hidden = true;
+                badge.textContent = '';
+            }
+        }
+
+        // -----------------------------------------------
+        // Init
+        // -----------------------------------------------
+        document.addEventListener('DOMContentLoaded', () => {
+            highlightActiveNav();
+            loadGlobalIdentities();
+            syncTodoLinks();
+            loadPendingTodoBadge();
+        });
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+
+</html>

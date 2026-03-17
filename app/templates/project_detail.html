@@ -1,0 +1,2862 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - 项目画板{% endblock %}
+
+{% block extra_css %}
+<style>
+    #project-board-shell {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-lg);
+    }
+
+    #project-board-actions {
+        display: flex;
+        gap: var(--space-sm);
+        flex-wrap: wrap;
+    }
+
+    #project-board-actions .btn[disabled] {
+        opacity: 0.55;
+        cursor: not-allowed;
+        filter: grayscale(0.2);
+    }
+
+    #project-board-layout {
+        display: flex;
+        gap: var(--space-lg);
+        align-items: stretch;
+    }
+
+    #project-board-members,
+    #project-board-detail {
+        flex: 0 0 20%;
+        min-width: 220px;
+    }
+
+    #project-board-canvas {
+        flex: 1 1 60%;
+        min-width: 0;
+    }
+
+    #project-board-members .card,
+    #project-board-canvas .card,
+    #project-board-detail .card {
+        height: 100%;
+    }
+
+    #project-member-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        margin-bottom: var(--space-lg);
+    }
+
+    #project-member-list article {
+        padding: var(--space-md);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        background: var(--bg-surface-hover);
+        cursor: grab;
+        transition: transform var(--trans-fast), box-shadow var(--trans-fast), border-color var(--trans-fast);
+    }
+
+    #project-member-list article:hover,
+    #project-member-list article:focus-visible {
+        transform: translateY(-2px);
+        border-color: var(--primary-color);
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+        outline: none;
+    }
+
+    #project-member-list article[data-current-member="true"] {
+        border-color: var(--primary-color);
+        background: rgba(59, 130, 246, 0.08);
+    }
+
+    #project-member-list article[data-drop-target="true"] {
+        border-color: #f97316;
+        box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.18);
+    }
+
+    .member-card-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-sm);
+        margin-top: var(--space-sm);
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+
+    #project-member-list p,
+    #project-board-empty,
+    #project-module-empty,
+    #project-detail-empty,
+    #project-detail-panel p,
+    #project-detail-panel dl {
+        color: var(--text-muted);
+    }
+
+    #project-member-list h3,
+    #project-canvas-container h3,
+    #project-detail-panel h3 {
+        margin-bottom: var(--space-xs);
+        font-size: 1rem;
+    }
+
+    #project-canvas-container {
+        position: relative;
+        min-height: 600px;
+        overflow: auto;
+        border-radius: var(--radius-lg);
+        border: 1px solid #1e293b;
+        background:
+            linear-gradient(180deg, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.98)),
+            repeating-linear-gradient(0deg, rgba(148, 163, 184, 0.12) 0, rgba(148, 163, 184, 0.12) 1px, transparent 1px, transparent 48px),
+            repeating-linear-gradient(90deg, rgba(148, 163, 184, 0.12) 0, rgba(148, 163, 184, 0.12) 1px, transparent 1px, transparent 48px);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    #project-canvas-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    #project-module-layer {
+        position: relative;
+        min-height: 600px;
+        z-index: 2;
+    }
+
+    #project-module-layer button {
+        position: absolute;
+        width: 210px;
+        text-align: left;
+        border: 1px solid rgba(226, 232, 240, 0.18);
+        background: rgba(255, 255, 255, 0.97);
+        border-radius: var(--radius-md);
+        padding: var(--space-md);
+        box-shadow: 0 18px 30px rgba(15, 23, 42, 0.18);
+        cursor: pointer;
+        transition: transform var(--trans-fast), box-shadow var(--trans-fast), border-color var(--trans-fast);
+    }
+
+    #project-module-layer button:hover,
+    #project-module-layer button:focus-visible,
+    #project-module-layer button[data-selected="true"] {
+        transform: translateY(-2px);
+        box-shadow: 0 22px 34px rgba(15, 23, 42, 0.24);
+        border-color: var(--primary-color);
+        outline: none;
+    }
+
+    #project-module-layer button[data-drop-target="true"] {
+        border-color: #f97316;
+        box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.22), 0 22px 34px rgba(15, 23, 42, 0.24);
+    }
+
+    #project-module-layer strong {
+        display: block;
+        margin-bottom: var(--space-xs);
+        color: var(--text-main);
+        font-size: 1rem;
+    }
+
+    #project-module-layer small {
+        display: block;
+        color: var(--text-muted);
+        margin-top: var(--space-xs);
+    }
+
+    #project-detail-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
+    }
+
+    .detail-section {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        padding-top: var(--space-md);
+        border-top: 1px solid var(--border-light);
+    }
+
+    .detail-section[hidden] {
+        display: none;
+    }
+
+    .panel-note {
+        padding: var(--space-sm) var(--space-md);
+        border-radius: var(--radius-md);
+        background: rgba(148, 163, 184, 0.12);
+        color: var(--text-muted);
+        font-size: 0.92rem;
+    }
+
+    .assessment-list,
+    .ranking-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+
+    .assessment-item,
+    .ranking-item {
+        padding: var(--space-sm) var(--space-md);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-light);
+        background: var(--bg-surface-hover);
+    }
+
+    .assessment-item strong,
+    .ranking-item strong {
+        color: var(--text-main);
+    }
+
+    .assessment-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-xs) var(--space-sm);
+        font-size: 0.88rem;
+        color: var(--text-muted);
+        margin-top: var(--space-xs);
+    }
+
+    .range-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .range-field label {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-sm);
+        font-weight: 600;
+        color: var(--text-main);
+    }
+
+    .range-field output {
+        min-width: 2rem;
+        text-align: right;
+        color: var(--primary-color);
+    }
+
+    .ranking-item-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-sm);
+        margin-bottom: 0.35rem;
+    }
+
+    .ranking-bar {
+        height: 10px;
+        width: 100%;
+        overflow: hidden;
+        border-radius: 9999px;
+        background: rgba(148, 163, 184, 0.2);
+    }
+
+    .ranking-bar > span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #2563eb, #0ea5e9);
+    }
+
+    .ranking-item[data-best="true"] {
+        border-color: #f59e0b;
+        background: rgba(245, 158, 11, 0.08);
+    }
+
+    .inline-actions {
+        display: flex;
+        gap: var(--space-sm);
+        flex-wrap: wrap;
+    }
+
+    .period-summary {
+        padding: var(--space-sm) var(--space-md);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        background: var(--bg-surface-hover);
+        color: var(--text-muted);
+        font-size: 0.92rem;
+    }
+
+    .period-summary strong {
+        color: var(--text-main);
+    }
+
+    .period-hint {
+        margin-top: var(--space-sm);
+        font-size: 0.9rem;
+    }
+
+    .period-quick-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        flex-wrap: wrap;
+        margin-top: var(--space-sm);
+    }
+
+    .period-status-note {
+        font-size: 0.88rem;
+        color: var(--text-muted);
+    }
+
+    .period-mode-group {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-sm);
+    }
+
+    .period-choice {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        padding: var(--space-sm) var(--space-md);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        background: var(--bg-surface-hover);
+        color: var(--text-main);
+        cursor: pointer;
+    }
+
+    .period-choice input {
+        margin: 0;
+    }
+
+    .period-choice span {
+        font-weight: 600;
+    }
+
+    .period-conditional[hidden] {
+        display: none;
+    }
+
+    .period-preview {
+        padding: var(--space-sm) var(--space-md);
+        border-radius: var(--radius-md);
+        background: rgba(37, 99, 235, 0.08);
+        color: var(--text-main);
+        font-size: 0.92rem;
+    }
+
+    .score-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-top: var(--space-sm);
+        padding: 0.35rem 0.6rem;
+        border-radius: 9999px;
+        background: rgba(245, 158, 11, 0.12);
+        color: #92400e;
+        font-size: 0.86rem;
+        font-weight: 600;
+    }
+
+    .score-chip[data-empty="true"] {
+        background: rgba(148, 163, 184, 0.14);
+        color: var(--text-muted);
+    }
+
+    .score-inline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-sm);
+        align-items: center;
+    }
+
+    .weights-panel {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-sm);
+        margin-top: var(--space-sm);
+    }
+
+    .weight-pill,
+    .score-breakdown-item {
+        padding: var(--space-sm) var(--space-md);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        background: var(--bg-surface-hover);
+    }
+
+    .weight-pill strong,
+    .score-breakdown-item strong {
+        display: block;
+        color: var(--text-main);
+        margin-bottom: 0.2rem;
+    }
+
+    .weight-pill span,
+    .score-breakdown-item span {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    .score-breakdown-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-sm);
+    }
+
+    .batch-preview-summary {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-sm);
+        margin-bottom: var(--space-md);
+    }
+
+    .batch-preview-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        max-height: 55vh;
+        overflow: auto;
+    }
+
+    .batch-preview-card {
+        padding: var(--space-md);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        background: var(--bg-surface-hover);
+    }
+
+    .batch-preview-card header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-sm);
+        margin-bottom: var(--space-sm);
+    }
+
+    .batch-preview-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-sm);
+        margin-bottom: var(--space-sm);
+    }
+
+    .batch-preview-metric {
+        padding: var(--space-sm);
+        border-radius: var(--radius-sm);
+        background: rgba(148, 163, 184, 0.12);
+    }
+
+    .batch-preview-metric strong {
+        display: block;
+        margin-bottom: 0.2rem;
+        color: var(--text-main);
+    }
+
+    .batch-preview-metric span {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    .batch-preview-modules {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-xs);
+    }
+
+    .batch-preview-tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.3rem 0.55rem;
+        border-radius: 9999px;
+        background: rgba(37, 99, 235, 0.1);
+        color: #1d4ed8;
+        font-size: 0.84rem;
+        font-weight: 600;
+    }
+
+    .batch-adjust-note {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-sm);
+        flex-wrap: wrap;
+        padding: var(--space-sm) var(--space-md);
+        border-radius: var(--radius-md);
+        background: rgba(245, 158, 11, 0.12);
+        color: #92400e;
+        font-size: 0.92rem;
+    }
+
+    .batch-adjust-note[hidden] {
+        display: none;
+    }
+
+    #project-detail-panel dl {
+        display: grid;
+        grid-template-columns: 80px 1fr;
+        gap: var(--space-sm);
+        margin: 0;
+    }
+
+    #project-detail-panel dt {
+        font-weight: 600;
+        color: var(--text-main);
+    }
+
+    #project-detail-panel dd {
+        margin: 0;
+    }
+
+    #project-board-meta {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        flex-wrap: wrap;
+        margin-top: var(--space-xs);
+    }
+
+    #project-board-header-hint,
+    #project-canvas-hint {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    @media (max-width: 1200px) {
+        #project-board-layout {
+            flex-direction: column;
+        }
+
+        #project-board-members,
+        #project-board-canvas,
+        #project-board-detail {
+            flex: 1 1 auto;
+            width: 100%;
+        }
+    }
+
+    @media (max-width: 768px) {
+        #project-module-layer button {
+            width: 180px;
+        }
+
+        #project-canvas-container,
+        #project-module-layer {
+            min-height: 720px;
+        }
+
+        .weights-panel,
+        .score-breakdown-grid,
+        .batch-preview-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div>
+        <h1 class="page-title">{{ project.name }}</h1>
+        <div id="project-board-meta">
+            {% if project.status == '已完成' %}
+            <span class="badge badge-success">{{ project.status }}</span>
+            {% elif project.status == '进行中' %}
+            <span class="badge badge-primary">{{ project.status }}</span>
+            {% elif project.status == '筹备中' %}
+            <span class="badge badge-secondary">{{ project.status }}</span>
+            {% else %}
+            <span class="badge badge-warning">{{ project.status }}</span>
+            {% endif %}
+            <span id="project-board-header-hint">支持模块连线、成员拖拽分配，以及右侧评估与智能推荐面板。</span>
+        </div>
+    </div>
+    <a href="/" class="btn btn-secondary">返回首页</a>
+</header>
+
+<section class="content-area">
+    <div id="project-board-shell">
+        <div id="project-board-actions">
+            <button type="button" data-manager-action="add-module" class="btn btn-primary" onclick="openModuleModalForCreate()" style="display: none;">添加模块</button>
+            <button type="button" data-manager-action="add-member" class="btn btn-secondary" onclick="openModal('add-member-modal')" style="display: none;">添加成员</button>
+            <button type="button" id="assessment-period-trigger" class="btn btn-secondary" onclick="openModal('assessment-period-modal')" style="display: none;">设置评分期</button>
+            <button type="button" id="batch-assignment-trigger" data-manager-action="batch-assign" class="btn btn-dark" style="display: none;" title="请先完成评分后再使用一键公平分配" onclick="handleBatchAssignmentTrigger()">⚡ 一键公平分配</button>
+            <button type="button" data-manager-action="save-dependencies" class="btn btn-dark" onclick="showToast('静态骨架阶段，保存依赖关系逻辑暂未接入。')" style="display: none;">保存依赖关系</button>
+        </div>
+        <div id="batch-adjust-mode-note" class="batch-adjust-note" hidden>
+            <span>微调模式：拖拽模块卡片到目标成员完成调整。完成后点击“确认开工”。</span>
+            <div class="inline-actions">
+                <button type="button" id="batch-adjust-confirm" class="btn btn-primary" onclick="confirmBatchAdjustmentMode()">确认开工</button>
+                <button type="button" class="btn btn-secondary" onclick="cancelBatchAdjustmentMode()">退出微调</button>
+            </div>
+        </div>
+
+        <div id="project-board-layout">
+            <aside id="project-board-members">
+                <div class="card">
+                    <div class="modal-header">
+                        <h2 class="modal-title">项目成员</h2>
+                        <span class="badge badge-secondary">{{ members|length }} 人</span>
+                    </div>
+
+                    <div id="project-member-list">
+                        {% if members %}
+                        {% for member in members %}
+                        <article draggable="true" tabindex="0" data-member-id="{{ member.id }}" data-member-name="{{ member.name }}">
+                            <h3>{{ member.name }}</h3>
+                            <span class="badge badge-primary">{{ member.skills or '待补充技能标签' }}</span>
+                            <div class="member-card-meta">
+                                <span>可用 {{ '%.1f'|format(member.available_hours or 0) }} 小时</span>
+                                <span data-member-hint>拖到模块可快速分配</span>
+                            </div>
+                        </article>
+                        {% endfor %}
+                        {% else %}
+                        <p id="project-board-empty">当前项目还没有成员。</p>
+                        {% endif %}
+                    </div>
+
+                    <button type="button" data-manager-action="add-member" class="btn btn-secondary" onclick="openModal('add-member-modal')" style="display: none;">添加成员</button>
+                </div>
+            </aside>
+
+            <main id="project-board-canvas">
+                <div class="card">
+                    <div class="modal-header">
+                        <div>
+                            <h2 class="modal-title">画板区域</h2>
+                            <p id="project-canvas-hint">模块卡片可自由拖动排布，也支持成员卡片拖到模块上进行快速分配。</p>
+                            <div class="weights-panel" id="project-score-weights">
+                                <div class="weight-pill">
+                                    <strong>难度权重</strong>
+                                    <span>{{ '%.2f'|format(project.weight_difficulty or 0.25) }}</span>
+                                </div>
+                                <div class="weight-pill">
+                                    <strong>时长权重</strong>
+                                    <span>{{ '%.2f'|format(project.weight_hours or 0.25) }}</span>
+                                </div>
+                                <div class="weight-pill">
+                                    <strong>枯燥权重</strong>
+                                    <span>{{ '%.2f'|format(project.weight_boredom or 0.25) }}</span>
+                                </div>
+                                <div class="weight-pill">
+                                    <strong>强度权重</strong>
+                                    <span>{{ '%.2f'|format(project.weight_intensity or 0.25) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="badge badge-secondary">{{ modules|length }} 个模块</span>
+                    </div>
+
+                    <div id="project-canvas-container">
+                        <svg id="project-canvas-svg" aria-hidden="true"></svg>
+                        <div id="project-module-layer">
+                            {% if modules %}
+                            {% for module in modules %}
+                            {% set column = loop.index0 % 3 %}
+                            {% set row = loop.index0 // 3 %}
+                            <button
+                                type="button"
+                                data-module-id="{{ module.id }}"
+                                data-module-name="{{ module.name }}"
+                                data-module-status="{{ module.status }}"
+                                data-module-description="{{ module.description or '暂无描述' }}"
+                                data-module-hours="{{ '%.1f'|format(module.estimated_hours or 0) }}"
+                                data-module-types="{{ module.allowed_file_types or '未限制' }}"
+                                data-module-project-id="{{ module.project_id }}"
+                                data-assigned-to="{{ module.assigned_to or '' }}"
+                                data-module-owner="{% if module.assigned_to %}{% for member in members %}{% if member.id == module.assigned_to %}{{ member.name }}{% endif %}{% endfor %}{% else %}未分配{% endif %}"
+                                onclick="selectModule(this)"
+                                style="left: {{ 40 + (column * 250) }}px; top: {{ 40 + (row * 150) }}px;"
+                            >
+                                <strong>{{ module.name }}</strong>
+                                {% if module.status == '已完成' %}
+                                <span class="badge badge-success">{{ module.status }}</span>
+                                {% elif module.status == '开发中' %}
+                                <span class="badge badge-primary">{{ module.status }}</span>
+                                {% elif module.status == '待审核' %}
+                                <span class="badge badge-warning">{{ module.status }}</span>
+                                {% else %}
+                                <span class="badge badge-secondary">{{ module.status }}</span>
+                                {% endif %}
+                                <span class="score-chip" data-module-score data-empty="true">—</span>
+                                <small>负责人：{% if module.assigned_to %}{% for member in members %}{% if member.id == module.assigned_to %}{{ member.name }}{% endif %}{% endfor %}{% else %}未分配{% endif %}</small>
+                                <small data-module-hint></small>
+                            </button>
+                            {% endfor %}
+                            {% else %}
+                            <p id="project-module-empty" style="padding: 40px;">当前还没有模块，先从上方添加模块开始。</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <aside id="project-board-detail">
+                <div class="card">
+                    <div class="modal-header">
+                        <h2 class="modal-title">模块详情</h2>
+                    </div>
+
+                    <div id="project-detail-panel">
+                        <p id="project-detail-empty">点击模块查看详情</p>
+                        <div id="project-detail-content" hidden>
+                            <h3 id="detail-module-name"></h3>
+                            <span id="detail-module-status" class="badge badge-secondary"></span>
+                            <div class="score-inline">
+                                <span id="detail-module-score" class="score-chip" data-empty="true">—</span>
+                                <span id="detail-score-count" class="panel-note">暂无评分</span>
+                            </div>
+                            <dl>
+                                <dt>负责人</dt>
+                                <dd id="detail-module-owner"></dd>
+                                <dt>预估</dt>
+                                <dd id="detail-module-hours"></dd>
+                                <dt>文件</dt>
+                                <dd id="detail-module-types"></dd>
+                            </dl>
+                            <p id="detail-module-description"></p>
+
+                            <section class="detail-section">
+                                <div>
+                                    <h3>综合分拆解</h3>
+                                    <p class="panel-note">展示四维平均值、项目权重和当前评分人数。</p>
+                                </div>
+                                <div id="detail-score-breakdown" class="score-breakdown-grid">
+                                    <div class="score-breakdown-item">
+                                        <strong>暂无评分</strong>
+                                        <span>模块收到评估后会显示综合分与四维拆解。</span>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section id="detail-assessment-section" class="detail-section" hidden>
+                                <div>
+                                    <h3>模块评估</h3>
+                                    <p class="panel-note" id="assessment-note">以当前左下角身份视角提交评分。</p>
+                                </div>
+                                <form id="assessment-form">
+                                    <div class="range-field">
+                                        <label for="assessment-difficulty">难度 <output id="assessment-difficulty-value">3</output></label>
+                                        <input id="assessment-difficulty" name="difficulty_score" type="range" min="1" max="5" step="1" value="3">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="assessment-hours">预估时长（小时）</label>
+                                        <input id="assessment-hours" name="estimated_hours" type="number" min="0" step="0.5" class="input-field" value="1">
+                                    </div>
+                                    <div class="range-field">
+                                        <label for="assessment-boredom">枯燥度 <output id="assessment-boredom-value">3</output></label>
+                                        <input id="assessment-boredom" name="boredom_score" type="range" min="1" max="5" step="1" value="3">
+                                    </div>
+                                    <div class="range-field">
+                                        <label for="assessment-intensity">工作强度 <output id="assessment-intensity-value">3</output></label>
+                                        <input id="assessment-intensity" name="intensity_score" type="range" min="1" max="5" step="1" value="3">
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">提交评估</button>
+                                </form>
+                                <div>
+                                    <h3>已有评估</h3>
+                                    <div id="assessment-list" class="assessment-list"></div>
+                                </div>
+                            </section>
+
+                            <section id="detail-locked-section" class="detail-section" hidden>
+                                <div class="panel-note">该模块当前不处于“待分配”状态，评分面板已隐藏。</div>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+</section>
+
+<div id="add-module-modal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="module-modal-title" class="modal-title">添加模块</h2>
+            <button type="button" class="modal-close" onclick="closeModal('add-module-modal')">&times;</button>
+        </div>
+
+        <form method="post" action="/projects/{{ project.id }}/modules" onsubmit="return submitModuleForm(event, this)">
+            <div class="form-group">
+                <label for="module-name">名称</label>
+                <input id="module-name" name="name" type="text" class="input-field" required>
+            </div>
+            <div class="form-group">
+                <label for="module-description">描述</label>
+                <textarea id="module-description" name="description" class="input-field" rows="4"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="module-hours">预估工时</label>
+                <input id="module-hours" name="estimated_hours" type="number" min="0" step="0.5" class="input-field" value="1.0">
+            </div>
+            <div class="form-group">
+                <label for="module-types">允许文件类型</label>
+                <input id="module-types" name="allowed_file_types" type="text" class="input-field" placeholder="例如：.zip,.pdf,.fig">
+            </div>
+            <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+                <button id="module-submit-btn" type="submit" class="btn btn-primary">提交模块</button>
+                <button id="module-delete-btn" type="button" class="btn btn-dark" onclick="deleteEditingModule()" style="display: none;">删除模块</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('add-module-modal')">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="add-member-modal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title">添加成员</h2>
+            <button type="button" class="modal-close" onclick="closeModal('add-member-modal')">&times;</button>
+        </div>
+
+        <form method="post" onsubmit="return submitMemberForm(this)">
+            <div class="form-group">
+                <label for="member-select">选择成员</label>
+                <select id="member-select" name="member_id" class="input-field" required>
+                    <option value="">请选择成员</option>
+                    {% for member in all_members %}
+                    {% set ns = namespace(is_joined=false) %}
+                    {% for joined in members %}
+                    {% if joined.id == member.id %}
+                    {% set ns.is_joined = true %}
+                    {% endif %}
+                    {% endfor %}
+                    {% if not ns.is_joined %}
+                    <option value="{{ member.id }}">{{ member.name }}{% if member.skills %}（{{ member.skills }}）{% endif %}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+                <button type="submit" class="btn btn-primary">加入项目</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('add-member-modal')">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="assessment-period-modal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title">设置评分期</h2>
+            <button type="button" class="modal-close" onclick="closeModal('assessment-period-modal')">&times;</button>
+        </div>
+
+        <div id="assessment-period-summary" class="period-summary">
+            {% if project.assessment_start and project.assessment_end %}
+            <strong>当前评分期：</strong>
+            <span id="assessment-period-summary-text">{{ project.assessment_start.strftime('%Y-%m-%d %H:%M') }} 至 {{ project.assessment_end.strftime('%Y-%m-%d %H:%M') }}</span>
+            {% else %}
+            <strong>当前评分期：</strong>
+            <span id="assessment-period-summary-text">尚未设置</span>
+            {% endif %}
+        </div>
+
+        <form id="assessment-period-form">
+            <div class="form-group">
+                <label>开始方式</label>
+                <div class="period-mode-group">
+                    <label class="period-choice">
+                        <input type="radio" name="start_mode" value="immediate">
+                        <span>立即开始</span>
+                    </label>
+                    <label class="period-choice">
+                        <input type="radio" name="start_mode" value="scheduled">
+                        <span>定时开始</span>
+                    </label>
+                </div>
+            </div>
+            <div id="assessment-period-message" class="panel-note" hidden></div>
+            <div id="assessment-start-at-group" class="form-group period-conditional" hidden>
+                <label for="assessment-start-at">定时开始时间</label>
+                <input
+                    id="assessment-start-at"
+                    name="start_at"
+                    type="datetime-local"
+                    class="input-field"
+                >
+                <p class="period-hint">定时开始时间必须晚于当前时间。</p>
+            </div>
+            <div class="form-group">
+                <label for="assessment-duration-preset">评分期时长</label>
+                <select id="assessment-duration-preset" name="duration_preset" class="input-field">
+                    <option value="1">1小时</option>
+                    <option value="6">6小时</option>
+                    <option value="12">12小时</option>
+                    <option value="24">24小时</option>
+                    <option value="48">48小时</option>
+                    <option value="72">72小时</option>
+                    <option value="custom">自定义</option>
+                </select>
+            </div>
+            <div id="assessment-duration-custom-group" class="form-group period-conditional" hidden>
+                <label for="assessment-duration-custom">自定义时长（小时）</label>
+                <input id="assessment-duration-custom" name="duration_hours_custom" type="number" min="0.5" max="168" step="0.5" class="input-field" value="24">
+                <p class="period-hint">时长必须大于 0，且不能超过 168 小时。</p>
+            </div>
+            <div id="assessment-period-preview" class="period-preview">
+                请选择开始方式与评分期时长。
+            </div>
+            <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+                <button type="submit" class="btn btn-primary">保存评分期</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal('assessment-period-modal')">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="batch-assignment-modal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div>
+                <h2 class="modal-title">公平分配预览</h2>
+                <p class="panel-note">先预览每位成员的历史负载与新增负载，再决定是否直接开工。</p>
+            </div>
+            <button type="button" class="modal-close" onclick="closeModal('batch-assignment-modal')">&times;</button>
+        </div>
+
+        <div class="batch-preview-summary">
+            <div id="batch-preview-status" class="panel-note">正在计算公平分配方案...</div>
+            <span id="batch-preview-fairness" class="score-chip" data-empty="true">公平指数 —</span>
+        </div>
+
+        <div id="batch-preview-list" class="batch-preview-list">
+            <div class="batch-preview-card">
+                <div class="panel-note">点击上方按钮后会在这里显示每位成员的负载预览。</div>
+            </div>
+        </div>
+
+        <div class="inline-actions" style="margin-top: var(--space-md);">
+            <button type="button" id="batch-preview-confirm" class="btn btn-primary" onclick="confirmBatchAssignmentPreview()" disabled>直接开工</button>
+            <button type="button" id="batch-preview-adjust" class="btn btn-secondary" onclick="enterBatchAdjustmentMode()" disabled>先微调</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal('batch-assignment-modal')">取消</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const moduleSummaryMap = new Map();
+    const moduleNameMap = new Map(
+        Array.from(document.querySelectorAll('#project-module-layer button[data-module-id]')).map((button) => [
+            String(button.dataset.moduleId),
+            button.dataset.moduleName || `模块 #${button.dataset.moduleId}`
+        ])
+    );
+    const projectScoreWeights = {
+        difficulty: {{ '%.2f'|format(project.weight_difficulty or 0.25) }},
+        hours: {{ '%.2f'|format(project.weight_hours or 0.25) }},
+        boredom: {{ '%.2f'|format(project.weight_boredom or 0.25) }},
+        intensity: {{ '%.2f'|format(project.weight_intensity or 0.25) }}
+    };
+    let batchAssignmentPreview = null;
+    let batchAssignmentDraftAssignments = {};
+    let isBatchAdjustmentMode = false;
+
+    function openModal(id) {
+        if (id === 'add-module-modal' && !isProjectManager()) {
+            showToast('只有项目创建者才能添加模块', true);
+            return;
+        }
+        if (id === 'add-member-modal' && !isProjectManager()) {
+            showToast('只有项目创建者才能添加项目成员', true);
+            return;
+        }
+        if (id === 'assessment-period-modal' && !isProjectManager()) {
+            showToast('只有项目创建者才能修改评分期', true);
+            return;
+        }
+        if (id === 'assessment-period-modal') {
+            syncAssessmentPeriodForm();
+        }
+        document.getElementById(id).classList.add('active');
+    }
+
+    function closeModal(id) {
+        document.getElementById(id).classList.remove('active');
+    }
+
+    function updateBatchAdjustmentNote() {
+        const note = document.getElementById('batch-adjust-mode-note');
+        if (!note) {
+            return;
+        }
+        note.hidden = !isBatchAdjustmentMode;
+        document.querySelectorAll('#project-module-layer button[data-module-id]').forEach((button) => {
+            button.draggable = isBatchAdjustmentMode;
+        });
+    }
+
+    function getMemberNameById(memberId) {
+        const card = document.querySelector(`#project-member-list article[data-member-id="${memberId}"]`);
+        return card ? (card.dataset.memberName || `成员 #${memberId}`) : `成员 #${memberId}`;
+    }
+
+    function buildAssignmentsFromPreview(preview) {
+        const assignments = {};
+        if (!preview || !preview.member_loads) {
+            return assignments;
+        }
+
+        preview.member_loads.forEach((item) => {
+            if (item.assigned_modules && item.assigned_modules.length) {
+                assignments[String(item.member_id)] = [...item.assigned_modules];
+            }
+        });
+        return assignments;
+    }
+
+    function applyDraftAssignmentsToBoard(assignments) {
+        document.querySelectorAll('#project-module-layer button[data-module-id]').forEach((button) => {
+            if (button.dataset.moduleStatus !== '待分配') {
+                return;
+            }
+            button.dataset.assignedTo = '';
+            button.dataset.moduleOwner = '未分配';
+            const ownerLine = button.querySelector('small');
+            if (ownerLine) {
+                ownerLine.textContent = '负责人：未分配';
+            }
+        });
+
+        Object.entries(assignments || {}).forEach(([memberId, moduleIds]) => {
+            const memberName = getMemberNameById(memberId);
+            moduleIds.forEach((moduleId) => {
+                const button = document.querySelector(`#project-module-layer button[data-module-id="${moduleId}"]`);
+                if (!button || button.dataset.moduleStatus !== '待分配') {
+                    return;
+                }
+                button.dataset.assignedTo = String(memberId);
+                button.dataset.moduleOwner = memberName;
+                const ownerLine = button.querySelector('small');
+                if (ownerLine) {
+                    ownerLine.textContent = `负责人：${memberName}`;
+                }
+                if (selectedModuleButton && String(selectedModuleButton.dataset.moduleId) === String(moduleId)) {
+                    selectModule(button);
+                }
+            });
+        });
+    }
+
+    function removeModuleFromDraftAssignments(moduleId) {
+        Object.keys(batchAssignmentDraftAssignments).forEach((memberId) => {
+            batchAssignmentDraftAssignments[memberId] = (batchAssignmentDraftAssignments[memberId] || []).filter((item) => String(item) !== String(moduleId));
+            if (!batchAssignmentDraftAssignments[memberId].length) {
+                delete batchAssignmentDraftAssignments[memberId];
+            }
+        });
+    }
+
+    function assignModuleInDraft(memberId, moduleId) {
+        removeModuleFromDraftAssignments(moduleId);
+        const key = String(memberId);
+        if (!batchAssignmentDraftAssignments[key]) {
+            batchAssignmentDraftAssignments[key] = [];
+        }
+        batchAssignmentDraftAssignments[key].push(parseInt(moduleId, 10));
+    }
+
+    function getPendingAssignmentsFromDraft() {
+        const payload = {};
+        Object.entries(batchAssignmentDraftAssignments).forEach(([memberId, moduleIds]) => {
+            const pendingIds = moduleIds.filter((moduleId) => {
+                const button = document.querySelector(`#project-module-layer button[data-module-id="${moduleId}"]`);
+                return button && button.dataset.moduleStatus === '待分配';
+            });
+            if (pendingIds.length) {
+                payload[memberId] = pendingIds;
+            }
+        });
+        return payload;
+    }
+
+    function isProjectManager() {
+        return getCurrentMemberId() === {{ project.created_by }};
+    }
+
+    function updateManagerActions() {
+        const isManager = isProjectManager();
+
+        document.querySelectorAll('[data-manager-action="add-member"]').forEach((button) => {
+            button.style.display = isManager ? '' : 'none';
+        });
+        document.querySelectorAll('[data-manager-action="add-module"]').forEach((button) => {
+            button.style.display = isManager ? '' : 'none';
+        });
+        document.querySelectorAll('[data-manager-action="save-dependencies"]').forEach((button) => {
+            button.style.display = isManager ? '' : 'none';
+        });
+        document.querySelectorAll('[data-manager-action="batch-assign"]').forEach((button) => {
+            button.style.display = isManager ? '' : 'none';
+        });
+
+        const periodTrigger = document.getElementById('assessment-period-trigger');
+        if (periodTrigger) {
+            periodTrigger.style.display = isManager ? '' : 'none';
+        }
+
+        updateBatchAssignmentAction();
+
+        document.querySelectorAll('#project-member-list article[data-member-id]').forEach((card) => {
+            const hint = card.querySelector('[data-member-hint]');
+            if (hint) {
+                hint.textContent = isManager ? '右键可移出项目' : '拖到模块可快速分配';
+            }
+        });
+        document.querySelectorAll('#project-module-layer button[data-module-id]').forEach((button) => {
+            const hint = button.querySelector('[data-module-hint]');
+            if (hint) {
+                hint.textContent = isManager ? '右键可编辑或删除' : '';
+            }
+        });
+
+        if (!isManager) {
+            resetModuleForm();
+            closeModal('add-module-modal');
+            closeModal('add-member-modal');
+            closeModal('assessment-period-modal');
+        }
+    }
+
+    let editingModuleId = null;
+
+    function resetModuleForm() {
+        const form = document.querySelector('#add-module-modal form');
+        const title = document.getElementById('module-modal-title');
+        const submitButton = document.getElementById('module-submit-btn');
+        const deleteButton = document.getElementById('module-delete-btn');
+        if (!form) {
+            return;
+        }
+
+        editingModuleId = null;
+        form.reset();
+        form.estimated_hours.value = '1.0';
+        if (title) {
+            title.textContent = '添加模块';
+        }
+        if (submitButton) {
+            submitButton.textContent = '提交模块';
+        }
+        if (deleteButton) {
+            deleteButton.style.display = 'none';
+        }
+    }
+
+    function openModuleModalForCreate() {
+        if (!isProjectManager()) {
+            showToast('只有项目创建者才能添加模块', true);
+            return;
+        }
+        resetModuleForm();
+        openModal('add-module-modal');
+    }
+
+    function openModuleModalForEdit(button) {
+        if (!isProjectManager()) {
+            return;
+        }
+
+        const form = document.querySelector('#add-module-modal form');
+        const title = document.getElementById('module-modal-title');
+        const submitButton = document.getElementById('module-submit-btn');
+        const deleteButton = document.getElementById('module-delete-btn');
+        if (!form) {
+            return;
+        }
+
+        editingModuleId = parseInt(button.dataset.moduleId, 10);
+        form.name.value = button.dataset.moduleName || '';
+        form.description.value = button.dataset.moduleDescription === '暂无描述' ? '' : (button.dataset.moduleDescription || '');
+        form.estimated_hours.value = button.dataset.moduleHours || '1.0';
+        form.allowed_file_types.value = button.dataset.moduleTypes === '未限制' ? '' : (button.dataset.moduleTypes || '');
+        if (title) {
+            title.textContent = `编辑模块：${button.dataset.moduleName}`;
+        }
+        if (submitButton) {
+            submitButton.textContent = '保存修改';
+        }
+        if (deleteButton) {
+            deleteButton.style.display = '';
+        }
+        openModal('add-module-modal');
+    }
+
+    function submitMemberForm(form) {
+        const memberId = form.member_id.value;
+        const currentMemberId = getCurrentMemberId();
+        if (!memberId) {
+            showToast('请先选择成员', true);
+            return false;
+        }
+        if (!isProjectManager()) {
+            showToast('只有项目创建者才能添加项目成员', true);
+            closeModal('add-member-modal');
+            return false;
+        }
+        if (!currentMemberId) {
+            showToast('请先在左下角切换当前视角成员', true);
+            return false;
+        }
+        form.action = `/projects/{{ project.id }}/members/${memberId}?current_member_id=${currentMemberId}`;
+        fetch(form.action, { method: 'POST' })
+            .then(async (response) => {
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || '添加成员失败');
+                }
+                showToast(data.message || '成员已加入项目');
+                closeModal('add-member-modal');
+                setTimeout(() => window.location.reload(), 600);
+            })
+            .catch((error) => showToast(error.message || '添加成员失败', true));
+        return false;
+    }
+
+    const ASSESSMENT_DURATION_PRESETS = [1, 6, 12, 24, 48, 72];
+    const ASSESSMENT_DURATION_MAX_HOURS = 168;
+
+    const assessmentPeriodState = {
+        start: {% if project.assessment_start %}'{{ project.assessment_start.strftime('%Y-%m-%dT%H:%M') }}'{% else %}''{% endif %},
+        end: {% if project.assessment_end %}'{{ project.assessment_end.strftime('%Y-%m-%dT%H:%M') }}'{% else %}''{% endif %}
+    };
+
+    function toDatetimeLocalValue(date) {
+        const pad = (value) => String(value).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function parseDatetimeLocalValue(value) {
+        if (!value) {
+            return null;
+        }
+
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    function fromApiDatetimeToLocalValue(value) {
+        if (!value) {
+            return '';
+        }
+
+        return toDatetimeLocalValue(new Date(value));
+    }
+
+    function getAssessmentPeriodStatus() {
+        const start = parseDatetimeLocalValue(assessmentPeriodState.start);
+        const end = parseDatetimeLocalValue(assessmentPeriodState.end);
+        const now = new Date();
+
+        if (!start || !end) {
+            return 'unset';
+        }
+        if (now < start) {
+            return 'upcoming';
+        }
+        if (now <= end) {
+            return 'active';
+        }
+        return 'ended';
+    }
+
+    function getAssessmentDurationHours() {
+        const start = parseDatetimeLocalValue(assessmentPeriodState.start);
+        const end = parseDatetimeLocalValue(assessmentPeriodState.end);
+        if (!start || !end || end <= start) {
+            return 24;
+        }
+        return Math.round(((end.getTime() - start.getTime()) / (60 * 60 * 1000)) * 100) / 100;
+    }
+
+    function setAssessmentModeValue(mode) {
+        const target = document.querySelector(`input[name="start_mode"][value="${mode}"]`);
+        if (target) {
+            target.checked = true;
+        }
+    }
+
+    function setAssessmentDurationValue(hours) {
+        const presetSelect = document.getElementById('assessment-duration-preset');
+        const customInput = document.getElementById('assessment-duration-custom');
+        if (!presetSelect || !customInput) {
+            return;
+        }
+
+        const normalized = Number.isFinite(hours) && hours > 0 ? hours : 24;
+        const matchedPreset = ASSESSMENT_DURATION_PRESETS.find((item) => Math.abs(item - normalized) < 0.001);
+
+        if (matchedPreset !== undefined) {
+            presetSelect.value = String(matchedPreset);
+            customInput.value = String(matchedPreset);
+        } else {
+            presetSelect.value = 'custom';
+            customInput.value = String(normalized);
+        }
+    }
+
+    function getSelectedAssessmentMode() {
+        const selected = document.querySelector('input[name="start_mode"]:checked');
+        return selected ? selected.value : 'immediate';
+    }
+
+    function getSelectedDurationHours() {
+        const presetSelect = document.getElementById('assessment-duration-preset');
+        const customInput = document.getElementById('assessment-duration-custom');
+        if (!presetSelect) {
+            return NaN;
+        }
+        if (presetSelect.value === 'custom') {
+            return parseFloat(customInput ? customInput.value : '');
+        }
+        return parseFloat(presetSelect.value);
+    }
+
+    function updateAssessmentPeriodFormState() {
+        const mode = getSelectedAssessmentMode();
+        const startAtGroup = document.getElementById('assessment-start-at-group');
+        const startAtInput = document.getElementById('assessment-start-at');
+        const customGroup = document.getElementById('assessment-duration-custom-group');
+        const presetSelect = document.getElementById('assessment-duration-preset');
+        const customInput = document.getElementById('assessment-duration-custom');
+        const message = document.getElementById('assessment-period-message');
+        const status = getAssessmentPeriodStatus();
+
+        if (startAtGroup && startAtInput) {
+            const shouldShowStartAt = mode === 'scheduled';
+            startAtGroup.hidden = !shouldShowStartAt;
+            startAtInput.required = shouldShowStartAt;
+            startAtInput.min = toDatetimeLocalValue(new Date());
+        }
+
+        if (customGroup && customInput && presetSelect) {
+            const isCustom = presetSelect.value === 'custom';
+            customGroup.hidden = !isCustom;
+            customInput.required = isCustom;
+        }
+
+        if (!message) {
+            updateAssessmentPeriodPreview();
+            return;
+        }
+
+        if (status === 'active') {
+            message.hidden = false;
+            message.textContent = mode === 'immediate'
+                ? '当前评分期进行中，保存后将从当前时刻重新计时。'
+                : '当前评分期进行中；若改为定时开始，保存后会用新的开始时间与时长覆盖当前配置。';
+        } else if (status === 'upcoming') {
+            message.hidden = false;
+            message.textContent = '当前评分期尚未开始，保存后会按新的开始时间与时长覆盖原配置。';
+        } else if (status === 'ended') {
+            message.hidden = false;
+            message.textContent = '当前评分期已结束，本次保存将创建新的评分期配置。';
+        } else {
+            message.hidden = true;
+            message.textContent = '';
+        }
+
+        updateAssessmentPeriodPreview();
+    }
+
+    function updateAssessmentPeriodPreview() {
+        const preview = document.getElementById('assessment-period-preview');
+        if (!preview) {
+            return;
+        }
+
+        const mode = getSelectedAssessmentMode();
+        const startAtInput = document.getElementById('assessment-start-at');
+        const durationHours = getSelectedDurationHours();
+        const start = mode === 'scheduled'
+            ? parseDatetimeLocalValue(startAtInput ? startAtInput.value : '')
+            : new Date();
+
+        if (!Number.isFinite(durationHours) || durationHours <= 0) {
+            preview.textContent = '请输入有效的评分期时长。';
+            return;
+        }
+
+        if (durationHours > ASSESSMENT_DURATION_MAX_HOURS) {
+            preview.textContent = `评分期时长不能超过 ${ASSESSMENT_DURATION_MAX_HOURS} 小时。`;
+            return;
+        }
+
+        if (!start) {
+            preview.textContent = '请选择定时开始时间。';
+            return;
+        }
+
+        if (mode === 'scheduled' && start <= new Date()) {
+            preview.textContent = '定时开始时间必须晚于当前时间。';
+            return;
+        }
+
+        const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
+        preview.textContent = `预计评分期：${formatLocalDateTime(toDatetimeLocalValue(start))} 至 ${formatLocalDateTime(toDatetimeLocalValue(end))}`;
+    }
+
+    function syncAssessmentPeriodForm() {
+        const startAtInput = document.getElementById('assessment-start-at');
+        if (!startAtInput) {
+            return;
+        }
+
+        const status = getAssessmentPeriodStatus();
+        const durationHours = getAssessmentDurationHours();
+
+        if (status === 'upcoming') {
+            setAssessmentModeValue('scheduled');
+            startAtInput.value = assessmentPeriodState.start || '';
+        } else {
+            setAssessmentModeValue('immediate');
+            startAtInput.value = status === 'ended' ? '' : (assessmentPeriodState.start || '');
+        }
+
+        setAssessmentDurationValue(durationHours);
+        updateAssessmentPeriodFormState();
+    }
+
+    function submitModuleForm(event, form) {
+        event.preventDefault();
+        const currentMemberId = getCurrentMemberId();
+
+        if (!isProjectManager()) {
+            showToast(editingModuleId ? '只有项目创建者才能编辑模块' : '只有项目创建者才能添加模块', true);
+            closeModal('add-module-modal');
+            return false;
+        }
+        if (!currentMemberId) {
+            showToast('请先在左下角切换当前视角成员', true);
+            return false;
+        }
+
+        const payload = {
+            name: form.name.value,
+            description: form.description.value,
+            estimated_hours: parseFloat(form.estimated_hours.value || '0'),
+            allowed_file_types: form.allowed_file_types.value
+        };
+
+        const requestUrl = editingModuleId
+            ? `/modules/${editingModuleId}?current_member_id=${currentMemberId}`
+            : `${form.action}?current_member_id=${currentMemberId}`;
+        const requestMethod = editingModuleId ? 'PUT' : 'POST';
+
+        fetch(requestUrl, {
+            method: requestMethod,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+            .then(async (response) => {
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || '添加模块失败');
+                }
+                showToast(editingModuleId ? `模块已更新：${data.name || payload.name}` : `模块已创建：${data.name || payload.name}`);
+                closeModal('add-module-modal');
+                resetModuleForm();
+                setTimeout(() => window.location.reload(), 600);
+            })
+            .catch((error) => showToast(error.message || (editingModuleId ? '编辑模块失败' : '添加模块失败'), true));
+
+        return false;
+    }
+
+    async function deleteEditingModule() {
+        if (!editingModuleId) {
+            return;
+        }
+        if (!isProjectManager()) {
+            showToast('只有项目创建者才能删除模块', true);
+            return;
+        }
+
+        const currentMemberId = getCurrentMemberId();
+        if (!currentMemberId) {
+            showToast('请先在左下角切换当前视角成员', true);
+            return;
+        }
+        if (!window.confirm('确认删除该模块吗？')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/modules/${editingModuleId}?current_member_id=${currentMemberId}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.detail || '删除模块失败');
+            }
+            closeModal('add-module-modal');
+            resetModuleForm();
+            showToast('模块已删除');
+            setTimeout(() => window.location.reload(), 600);
+        } catch (error) {
+            showToast(error.message || '删除模块失败', true);
+        }
+    }
+
+    function formatLocalDateTime(value) {
+        if (!value) {
+            return '';
+        }
+        return value.replace('T', ' ');
+    }
+
+    async function submitAssessmentPeriodForm(event) {
+        event.preventDefault();
+
+        if (!isProjectManager()) {
+            showToast('只有项目创建者才能修改评分期', true);
+            closeModal('assessment-period-modal');
+            return;
+        }
+
+        const form = event.currentTarget;
+        const currentMemberId = getCurrentMemberId();
+        const startMode = getSelectedAssessmentMode();
+        const startAtValue = form.start_at.value;
+        const durationHours = getSelectedDurationHours();
+        const startAt = startMode === 'scheduled' ? parseDatetimeLocalValue(startAtValue) : null;
+
+        if (!currentMemberId) {
+            showToast('请先在左下角切换当前视角成员', true);
+            return;
+        }
+        if (!['immediate', 'scheduled'].includes(startMode)) {
+            showToast('开始方式不合法', true);
+            return;
+        }
+        if (startMode === 'scheduled' && (!startAt || startAt <= new Date())) {
+            showToast('定时开始时间必须晚于当前时间', true);
+            return;
+        }
+        if (!Number.isFinite(durationHours) || durationHours <= 0) {
+            showToast('评分期时长必须大于 0', true);
+            return;
+        }
+        if (durationHours > ASSESSMENT_DURATION_MAX_HOURS) {
+            showToast(`评分期时长不能超过 ${ASSESSMENT_DURATION_MAX_HOURS} 小时`, true);
+            return;
+        }
+
+        const payload = {
+            start_mode: startMode,
+            start_at: startMode === 'scheduled' ? startAtValue : null,
+            duration_hours: durationHours
+        };
+
+        try {
+            const response = await fetch(`/projects/{{ project.id }}/assessment-period?current_member_id=${currentMemberId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(getApiErrorMessage(data, '设置评分期失败'));
+            }
+
+            assessmentPeriodState.start = fromApiDatetimeToLocalValue(data.assessment_start);
+            assessmentPeriodState.end = fromApiDatetimeToLocalValue(data.assessment_end);
+
+            const summary = document.getElementById('assessment-period-summary-text');
+            if (summary) {
+                summary.textContent = `${formatLocalDateTime(assessmentPeriodState.start)} 至 ${formatLocalDateTime(assessmentPeriodState.end)}`;
+            }
+            syncAssessmentPeriodForm();
+            closeModal('assessment-period-modal');
+            showToast('评分期已更新');
+        } catch (error) {
+            showToast(error.message || '设置评分期失败', true);
+        }
+    }
+
+    async function removeProjectMember(memberId, memberName) {
+        if (!isProjectManager()) {
+            return;
+        }
+
+        if (memberId === {{ project.created_by }}) {
+            showToast('不能移除项目创建者本人', true);
+            return;
+        }
+
+        const confirmed = window.confirm(`确认将 ${memberName} 移出项目吗？`);
+        if (!confirmed) {
+            return;
+        }
+
+        const currentMemberId = getCurrentMemberId();
+        if (!currentMemberId) {
+            showToast('请先在左下角切换当前视角成员', true);
+            return;
+        }
+
+        const response = await fetch(`/projects/{{ project.id }}/members/${memberId}?current_member_id=${currentMemberId}`, {
+            method: 'DELETE'
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || '移除成员失败');
+        }
+
+        showToast(data.message || '成员已移出项目');
+        setTimeout(() => window.location.reload(), 600);
+    }
+
+    let selectedModuleButton = null;
+
+    function formatScore(value) {
+        return `⭐ ${Number(value).toFixed(2)}`;
+    }
+
+    function getModuleScoreChip(button) {
+        return button ? button.querySelector('[data-module-score]') : null;
+    }
+
+    function applyModuleSummaryToCard(moduleId, summary) {
+        const button = document.querySelector(`#project-module-layer button[data-module-id="${moduleId}"]`);
+        const scoreChip = getModuleScoreChip(button);
+        if (!button || !scoreChip) {
+            return;
+        }
+
+        if (!summary || !summary.assessment_count) {
+            button.dataset.moduleScore = '';
+            scoreChip.dataset.empty = 'true';
+            scoreChip.textContent = '—';
+            return;
+        }
+
+        button.dataset.moduleScore = String(summary.composite_score);
+        scoreChip.dataset.empty = 'false';
+        scoreChip.textContent = formatScore(summary.composite_score);
+    }
+
+    function renderScoreBreakdown(summary) {
+        const scoreChip = document.getElementById('detail-module-score');
+        const scoreCount = document.getElementById('detail-score-count');
+        const breakdown = document.getElementById('detail-score-breakdown');
+        if (!scoreChip || !scoreCount || !breakdown) {
+            return;
+        }
+
+        if (!summary || !summary.assessment_count) {
+            scoreChip.dataset.empty = 'true';
+            scoreChip.textContent = '—';
+            scoreCount.textContent = '暂无评分';
+            breakdown.innerHTML = `
+                <div class="score-breakdown-item">
+                    <strong>暂无评分</strong>
+                    <span>模块收到评估后会显示综合分与四维拆解。</span>
+                </div>
+            `;
+            return;
+        }
+
+        const weightMap = summary.weights_used || projectScoreWeights;
+        scoreChip.dataset.empty = 'false';
+        scoreChip.textContent = formatScore(summary.composite_score);
+        scoreCount.textContent = `${summary.assessment_count} 人已评分`;
+        breakdown.innerHTML = [
+            ['难度', summary.avg_difficulty, weightMap.difficulty],
+            ['时长', summary.avg_estimated_hours, weightMap.hours],
+            ['枯燥', summary.avg_boredom, weightMap.boredom],
+            ['强度', summary.avg_intensity, weightMap.intensity]
+        ].map(([label, average, weight]) => `
+            <div class="score-breakdown-item">
+                <strong>${label}</strong>
+                <span>平均值 ${Number(average).toFixed(2)} / 权重 ${Number(weight).toFixed(2)}</span>
+            </div>
+        `).join('');
+    }
+
+    async function loadModuleSummary(moduleId) {
+        try {
+            const response = await fetch(`/scoring/module/${moduleId}/summary`);
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || '加载综合分失败');
+            }
+            moduleSummaryMap.set(String(moduleId), data);
+            applyModuleSummaryToCard(moduleId, data);
+            if (selectedModuleButton && String(selectedModuleButton.dataset.moduleId) === String(moduleId)) {
+                renderScoreBreakdown(data);
+            }
+        } catch (error) {
+            moduleSummaryMap.set(String(moduleId), null);
+            applyModuleSummaryToCard(moduleId, null);
+            if (selectedModuleButton && String(selectedModuleButton.dataset.moduleId) === String(moduleId)) {
+                renderScoreBreakdown(null);
+            }
+        }
+    }
+
+    async function loadAllModuleSummaries() {
+        const moduleButtons = Array.from(document.querySelectorAll('#project-module-layer button[data-module-id]'));
+        await Promise.all(moduleButtons.map((button) => loadModuleSummary(button.dataset.moduleId)));
+    }
+
+    function updateRangeOutput(inputId, outputId, formatter) {
+        const input = document.getElementById(inputId);
+        const output = document.getElementById(outputId);
+        if (!input || !output) {
+            return;
+        }
+        const render = () => {
+            output.textContent = formatter ? formatter(input.value) : input.value;
+        };
+        input.addEventListener('input', render);
+        render();
+    }
+
+    function setDetailPanels(status) {
+        const isPending = status === '待分配';
+        document.getElementById('detail-assessment-section').hidden = !isPending;
+        document.getElementById('detail-locked-section').hidden = isPending;
+    }
+
+    function isAssignmentLockedByAssessmentPeriod() {
+        return getAssessmentPeriodStatus() === 'active';
+    }
+
+    function getPendingModuleCount() {
+        return document.querySelectorAll('#project-module-layer button[data-module-id][data-module-status="待分配"]').length;
+    }
+
+    function updateBatchAssignmentAction() {
+        const trigger = document.getElementById('batch-assignment-trigger');
+        if (!trigger) {
+            return;
+        }
+
+        const isManager = isProjectManager();
+        const pendingCount = getPendingModuleCount();
+        const isAssessmentActive = getAssessmentPeriodStatus() === 'active';
+
+        trigger.style.display = isManager ? '' : 'none';
+        if (!isManager) {
+            trigger.disabled = true;
+            trigger.title = '';
+            return;
+        }
+
+        if (isAssessmentActive) {
+            trigger.disabled = true;
+            trigger.title = '请等待评分结束';
+            return;
+        }
+
+        if (isBatchAdjustmentMode) {
+            trigger.disabled = true;
+            trigger.title = '请先完成或退出当前微调模式';
+            return;
+        }
+
+        if (pendingCount === 0) {
+            trigger.disabled = true;
+            trigger.title = '没有待分配模块';
+            return;
+        }
+
+        trigger.disabled = false;
+        trigger.title = '根据历史负载和综合分预览公平分配方案';
+    }
+
+    function renderBatchAssignmentPreview(preview) {
+        const fairnessChip = document.getElementById('batch-preview-fairness');
+        const statusNode = document.getElementById('batch-preview-status');
+        const listNode = document.getElementById('batch-preview-list');
+        const confirmButton = document.getElementById('batch-preview-confirm');
+        const adjustButton = document.getElementById('batch-preview-adjust');
+        if (!fairnessChip || !statusNode || !listNode || !confirmButton || !adjustButton) {
+            return;
+        }
+
+        if (!preview || !preview.member_loads || !preview.member_loads.length) {
+            fairnessChip.dataset.empty = 'true';
+            fairnessChip.textContent = '公平指数 —';
+            statusNode.textContent = '暂无可展示的分配方案';
+            listNode.innerHTML = '<div class="batch-preview-card"><div class="panel-note">当前没有可用的预分配结果。</div></div>';
+            confirmButton.disabled = true;
+            adjustButton.disabled = true;
+            return;
+        }
+
+        fairnessChip.dataset.empty = 'false';
+        fairnessChip.textContent = `公平指数 ${Number(preview.fairness_index || 0).toFixed(4)}`;
+        statusNode.textContent = '以下方案尚未落库，你可以直接确认开工或先进入微调模式。';
+        listNode.innerHTML = preview.member_loads.map((item) => {
+            const modules = (item.assigned_modules || []).map((moduleId) => {
+                const label = moduleNameMap.get(String(moduleId)) || `模块 #${moduleId}`;
+                return `<span class="batch-preview-tag">${label}</span>`;
+            }).join('');
+            const modulesHtml = modules || '<span class="panel-note">本轮未分配模块</span>';
+            return `
+                <article class="batch-preview-card">
+                    <header>
+                        <strong>${item.member_name}</strong>
+                        <span class="badge badge-secondary">${(item.assigned_modules || []).length} 个模块</span>
+                    </header>
+                    <div class="batch-preview-grid">
+                        <div class="batch-preview-metric">
+                            <strong>30天已有分数</strong>
+                            <span>${Number(item.existing_30day_score || 0).toFixed(2)}</span>
+                        </div>
+                        <div class="batch-preview-metric">
+                            <strong>本次新增分数</strong>
+                            <span>${Number(item.new_assigned_score || 0).toFixed(2)}</span>
+                        </div>
+                        <div class="batch-preview-metric">
+                            <strong>合计总分</strong>
+                            <span>${Number(item.total_30day_score || 0).toFixed(2)}</span>
+                        </div>
+                    </div>
+                    <div class="batch-preview-modules">${modulesHtml}</div>
+                </article>
+            `;
+        }).join('');
+        confirmButton.disabled = false;
+        adjustButton.disabled = false;
+    }
+
+    async function handleBatchAssignmentTrigger() {
+        const trigger = document.getElementById('batch-assignment-trigger');
+        if (!trigger || trigger.disabled) {
+            if (getPendingModuleCount() === 0) {
+                showToast('没有待分配模块', true);
+            }
+            return;
+        }
+
+        const confirmButton = document.getElementById('batch-preview-confirm');
+        const adjustButton = document.getElementById('batch-preview-adjust');
+        const statusNode = document.getElementById('batch-preview-status');
+        const fairnessChip = document.getElementById('batch-preview-fairness');
+        const listNode = document.getElementById('batch-preview-list');
+
+        batchAssignmentPreview = null;
+        if (confirmButton) {
+            confirmButton.disabled = true;
+        }
+        if (adjustButton) {
+            adjustButton.disabled = true;
+        }
+        if (statusNode) {
+            statusNode.textContent = '正在计算公平分配方案...';
+        }
+        if (fairnessChip) {
+            fairnessChip.dataset.empty = 'true';
+            fairnessChip.textContent = '公平指数 —';
+        }
+        if (listNode) {
+            listNode.innerHTML = '<div class="batch-preview-card"><div class="panel-note">正在基于历史负载与综合分生成预分配方案...</div></div>';
+        }
+
+        openModal('batch-assignment-modal');
+
+        try {
+            const response = await fetch(`/assignments/batch/{{ project.id }}`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || '加载公平分配预览失败');
+            }
+            batchAssignmentPreview = data;
+            renderBatchAssignmentPreview(data);
+        } catch (error) {
+            batchAssignmentPreview = null;
+            renderBatchAssignmentPreview(null);
+            if (statusNode) {
+                statusNode.textContent = error.message || '加载公平分配预览失败';
+            }
+            showToast(error.message || '加载公平分配预览失败', true);
+        }
+    }
+
+    async function confirmBatchAssignmentPreview() {
+        if (!batchAssignmentPreview || !batchAssignmentPreview.member_loads) {
+            showToast('请先生成预分配方案', true);
+            return;
+        }
+
+        const currentMemberId = getCurrentMemberId();
+        if (!currentMemberId) {
+            showToast('请先在左下角切换当前视角成员', true);
+            return;
+        }
+        if (!isProjectManager()) {
+            showToast('只有项目创建者才能确认批量分配', true);
+            return;
+        }
+
+        const assignments = buildAssignmentsFromPreview(batchAssignmentPreview);
+
+        try {
+            const response = await fetch(`/assignments/batch/{{ project.id }}/confirm?current_member_id=${currentMemberId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assignments })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || '确认批量分配失败');
+            }
+            isBatchAdjustmentMode = false;
+            updateBatchAdjustmentNote();
+            closeModal('batch-assignment-modal');
+            showToast(data.message || '批量分配已确认，模块已进入开发中');
+            setTimeout(() => window.location.reload(), 600);
+        } catch (error) {
+            showToast(error.message || '确认批量分配失败', true);
+        }
+    }
+
+    function enterBatchAdjustmentMode() {
+        if (!batchAssignmentPreview) {
+            showToast('请先生成预分配方案', true);
+            return;
+        }
+
+        batchAssignmentDraftAssignments = buildAssignmentsFromPreview(batchAssignmentPreview);
+        isBatchAdjustmentMode = true;
+        applyDraftAssignmentsToBoard(batchAssignmentDraftAssignments);
+        updateBatchAdjustmentNote();
+        updateBatchAssignmentAction();
+        closeModal('batch-assignment-modal');
+        showToast('已进入微调模式，可拖拽模块卡片到目标成员后确认开工');
+    }
+
+    function cancelBatchAdjustmentMode() {
+        isBatchAdjustmentMode = false;
+        batchAssignmentDraftAssignments = {};
+        updateBatchAdjustmentNote();
+        updateBatchAssignmentAction();
+        window.location.reload();
+    }
+
+    async function confirmBatchAdjustmentMode() {
+        if (!isBatchAdjustmentMode) {
+            showToast('当前未处于微调模式', true);
+            return;
+        }
+
+        const currentMemberId = getCurrentMemberId();
+        if (!currentMemberId) {
+            showToast('请先在左下角切换当前视角成员', true);
+            return;
+        }
+        if (!isProjectManager()) {
+            showToast('只有项目创建者才能确认开工', true);
+            return;
+        }
+
+        const assignments = getPendingAssignmentsFromDraft();
+        if (!Object.keys(assignments).length) {
+            showToast('当前没有待确认开工的模块，页面将刷新同步状态');
+            isBatchAdjustmentMode = false;
+            updateBatchAdjustmentNote();
+            setTimeout(() => window.location.reload(), 500);
+            return;
+        }
+
+        try {
+            const response = await fetch(`/assignments/batch/{{ project.id }}/confirm?current_member_id=${currentMemberId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assignments })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || '确认开工失败');
+            }
+            isBatchAdjustmentMode = false;
+            batchAssignmentDraftAssignments = {};
+            updateBatchAdjustmentNote();
+            showToast(data.message || '模块已确认开工');
+            setTimeout(() => window.location.reload(), 600);
+        } catch (error) {
+            showToast(error.message || '确认开工失败', true);
+        }
+    }
+
+    function updateCurrentMemberHighlight() {
+        const currentMemberId = getCurrentMemberId();
+        document.querySelectorAll('#project-member-list article[data-member-id]').forEach((card) => {
+            card.dataset.currentMember = String(parseInt(card.dataset.memberId, 10) === currentMemberId);
+        });
+    }
+
+    function renderAssessments(assessments) {
+        const container = document.getElementById('assessment-list');
+        if (!container) {
+            return;
+        }
+
+        if (!assessments.length) {
+            container.innerHTML = '<div class="panel-note">还没有成员提交评估。</div>';
+            return;
+        }
+
+        const memberMap = new Map(
+            Array.from(document.querySelectorAll('#project-member-list article[data-member-id]')).map((card) => [
+                String(card.dataset.memberId),
+                card.dataset.memberName
+            ])
+        );
+
+        container.innerHTML = assessments.map((item) => {
+            const memberName = memberMap.get(String(item.member_id)) || `成员 #${item.member_id}`;
+            return `
+                <article class="assessment-item">
+                    <strong>${memberName}</strong>
+                    <div class="assessment-grid">
+                        <span>难度：${item.difficulty_score}</span>
+                        <span>时长：${item.estimated_hours} 小时</span>
+                        <span>枯燥：${item.boredom_score}</span>
+                        <span>强度：${item.intensity_score}</span>
+                    </div>
+                </article>
+            `;
+        }).join('');
+    }
+
+    async function loadAssessments(moduleId) {
+        try {
+            const response = await fetch(`/assessments/module/${moduleId}`);
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || '加载评估列表失败');
+            }
+            renderAssessments(data);
+        } catch (error) {
+            document.getElementById('assessment-list').innerHTML = `<div class="panel-note">${error.message || '加载评估列表失败'}</div>`;
+        }
+    }
+
+    function updateModuleNodePresentation(moduleId, ownerName, memberId, status) {
+        const button = document.querySelector(`#project-module-layer button[data-module-id="${moduleId}"]`);
+        if (!button) {
+            return;
+        }
+
+        button.dataset.moduleOwner = ownerName;
+        button.dataset.assignedTo = memberId || '';
+        button.dataset.moduleStatus = status;
+
+        const badge = button.querySelector('.badge');
+        if (badge) {
+            badge.textContent = status;
+            badge.className = 'badge badge-secondary';
+            if (status === '已完成') {
+                badge.className = 'badge badge-success';
+            } else if (status === '开发中') {
+                badge.className = 'badge badge-primary';
+            } else if (status === '待审核') {
+                badge.className = 'badge badge-warning';
+            }
+        }
+
+        const ownerLine = button.querySelector('small');
+        if (ownerLine) {
+            ownerLine.textContent = `负责人：${ownerName || '未分配'}`;
+        }
+
+        if (selectedModuleButton && String(selectedModuleButton.dataset.moduleId) === String(moduleId)) {
+            selectModule(button);
+        }
+
+        updateBatchAssignmentAction();
+    }
+
+    async function submitAssessmentForm(event) {
+        event.preventDefault();
+        if (!selectedModuleButton) {
+            showToast('请先选择模块', true);
+            return;
+        }
+
+        const memberId = getCurrentMemberId();
+        if (!memberId) {
+            showToast('请先在左下角切换当前视角成员', true);
+            return;
+        }
+
+        const form = event.currentTarget;
+        const payload = {
+            member_id: memberId,
+            module_id: parseInt(selectedModuleButton.dataset.moduleId, 10),
+            difficulty_score: parseInt(form.difficulty_score.value, 10),
+            estimated_hours: parseFloat(form.estimated_hours.value || '0'),
+            boredom_score: parseInt(form.boredom_score.value, 10),
+            intensity_score: parseInt(form.intensity_score.value, 10)
+        };
+
+        try {
+            const response = await fetch('/assessments/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || '提交评估失败');
+            }
+            showToast('评估已提交');
+            await loadAssessments(payload.module_id);
+            await loadModuleSummary(payload.module_id);
+            await triggerAutoSummarize();
+        } catch (error) {
+            showToast(error.message || '提交评估失败', true);
+        }
+    }
+
+    async function triggerAutoSummarize() {
+        try {
+            const response = await fetch(`/scoring/project/{{ project.id }}/auto-summarize`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                return;
+            }
+
+            if (data.summarized) {
+                showToast('所有有效评分已完成，系统已自动汇总综合分');
+            }
+        } catch (error) {
+            // 自动汇总失败不阻断正常打分流程
+        }
+    }
+
+    function selectModule(button) {
+        selectedModuleButton = button;
+
+        document.querySelectorAll('#project-module-layer button[data-module-id]').forEach((item) => {
+            item.dataset.selected = 'false';
+        });
+        button.dataset.selected = 'true';
+
+        const detailEmpty = document.getElementById('project-detail-empty');
+        const detailContent = document.getElementById('project-detail-content');
+        const detailStatus = document.getElementById('detail-module-status');
+        const status = button.dataset.moduleStatus;
+
+        detailEmpty.hidden = true;
+        detailContent.hidden = false;
+
+        document.getElementById('detail-module-name').textContent = button.dataset.moduleName;
+        document.getElementById('detail-module-owner').textContent = button.dataset.moduleOwner || '未分配';
+        document.getElementById('detail-module-hours').textContent = `${button.dataset.moduleHours} 小时`;
+        document.getElementById('detail-module-types').textContent = button.dataset.moduleTypes || '未限制';
+        document.getElementById('detail-module-description').textContent = button.dataset.moduleDescription || '暂无描述';
+        detailStatus.textContent = status;
+        detailStatus.className = 'badge badge-secondary';
+        setDetailPanels(status);
+        loadAssessments(button.dataset.moduleId);
+        renderScoreBreakdown(moduleSummaryMap.get(String(button.dataset.moduleId)) || null);
+
+        if (status === '已完成') {
+            detailStatus.className = 'badge badge-success';
+        } else if (status === '开发中') {
+            detailStatus.className = 'badge badge-primary';
+        } else if (status === '待审核') {
+            detailStatus.className = 'badge badge-warning';
+        }
+    }
+
+    document.addEventListener('click', function (event) {
+        const overlays = ['add-module-modal', 'add-member-modal', 'assessment-period-modal'];
+        overlays.forEach((id) => {
+            const overlay = document.getElementById(id);
+            if (event.target === overlay) {
+                closeModal(id);
+            }
+        });
+    });
+
+    function autoSelectModuleFromQuery() {
+        const url = new URL(window.location.href);
+        const moduleId = url.searchParams.get('module_id');
+        if (!moduleId) {
+            return;
+        }
+
+        const button = document.querySelector(`#project-module-layer button[data-module-id="${moduleId}"]`);
+        if (!button) {
+            return;
+        }
+
+        selectModule(button);
+        button.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    }
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        updateRangeOutput('assessment-difficulty', 'assessment-difficulty-value');
+        updateRangeOutput('assessment-boredom', 'assessment-boredom-value');
+        updateRangeOutput('assessment-intensity', 'assessment-intensity-value');
+        updateCurrentMemberHighlight();
+        updateManagerActions();
+        updateBatchAdjustmentNote();
+        syncAssessmentPeriodForm();
+        loadAllModuleSummaries();
+        autoSelectModuleFromQuery();
+
+        const assessmentForm = document.getElementById('assessment-form');
+        const assessmentPeriodForm = document.getElementById('assessment-period-form');
+        const assessmentStartModeInputs = document.querySelectorAll('input[name="start_mode"]');
+        const assessmentStartAtInput = document.getElementById('assessment-start-at');
+        const assessmentDurationPreset = document.getElementById('assessment-duration-preset');
+        const assessmentDurationCustom = document.getElementById('assessment-duration-custom');
+
+        if (assessmentForm) {
+            assessmentForm.addEventListener('submit', submitAssessmentForm);
+        }
+        if (assessmentPeriodForm) {
+            assessmentPeriodForm.addEventListener('submit', submitAssessmentPeriodForm);
+        }
+        assessmentStartModeInputs.forEach((input) => {
+            input.addEventListener('change', updateAssessmentPeriodFormState);
+        });
+        if (assessmentStartAtInput) {
+            assessmentStartAtInput.addEventListener('input', updateAssessmentPeriodFormState);
+        }
+        if (assessmentDurationPreset) {
+            assessmentDurationPreset.addEventListener('change', updateAssessmentPeriodFormState);
+        }
+        if (assessmentDurationCustom) {
+            assessmentDurationCustom.addEventListener('input', updateAssessmentPeriodFormState);
+        }
+        window.addEventListener('storage', function (event) {
+            if (event.key === 'current_member_id') {
+                updateCurrentMemberHighlight();
+                updateManagerActions();
+            }
+        });
+
+        document.querySelectorAll('#project-member-list article[data-member-id]').forEach((card) => {
+            card.addEventListener('dragstart', function (event) {
+                if (isBatchAdjustmentMode) {
+                    event.preventDefault();
+                    return;
+                }
+                if (isAssignmentLockedByAssessmentPeriod()) {
+                    event.preventDefault();
+                    showToast('评分期内禁止手动分配', true);
+                    return;
+                }
+                event.dataTransfer.setData('text/plain', card.dataset.memberId);
+                event.dataTransfer.effectAllowed = 'move';
+            });
+            card.addEventListener('dragover', function (event) {
+                if (!isBatchAdjustmentMode) {
+                    return;
+                }
+                if (isAssignmentLockedByAssessmentPeriod()) {
+                    card.dataset.dropTarget = 'false';
+                    return;
+                }
+                const moduleId = event.dataTransfer.getData('application/module-id');
+                if (!moduleId) {
+                    return;
+                }
+                event.preventDefault();
+                card.dataset.dropTarget = 'true';
+            });
+            card.addEventListener('dragleave', function () {
+                card.dataset.dropTarget = 'false';
+            });
+            card.addEventListener('drop', function (event) {
+                card.dataset.dropTarget = 'false';
+                if (!isBatchAdjustmentMode) {
+                    return;
+                }
+                if (isAssignmentLockedByAssessmentPeriod()) {
+                    showToast('评分期内禁止手动分配', true);
+                    return;
+                }
+                event.preventDefault();
+                const moduleId = event.dataTransfer.getData('application/module-id');
+                if (!moduleId) {
+                    return;
+                }
+                const moduleNode = document.querySelector(`#project-module-layer button[data-module-id="${moduleId}"]`);
+                if (!moduleNode) {
+                    return;
+                }
+                handleDirectAssignment(moduleNode, card.dataset.memberId);
+            });
+            card.addEventListener('contextmenu', async function (event) {
+                if (!isProjectManager()) {
+                    return;
+                }
+
+                event.preventDefault();
+                try {
+                    await removeProjectMember(parseInt(card.dataset.memberId, 10), card.dataset.memberName || `成员 #${card.dataset.memberId}`);
+                } catch (error) {
+                    showToast(error.message || '移除成员失败', true);
+                }
+            });
+        });
+
+        const projectId = {{ project.id }};
+        const storageKey = `project_${projectId}_positions`;
+        const canvasContainer = document.getElementById('project-canvas-container');
+        const canvasSvg = document.getElementById('project-canvas-svg');
+        const moduleLayer = document.getElementById('project-module-layer');
+        const moduleNodes = Array.from(document.querySelectorAll('#project-module-layer button[data-module-id]'));
+        const saveButton = Array.from(document.querySelectorAll('#project-board-actions button'))
+            .find((button) => button.textContent.trim() === '保存依赖关系');
+
+        if (!canvasContainer || !canvasSvg || !moduleLayer || !moduleNodes.length) {
+            return;
+        }
+
+        moduleNodes.forEach((button) => {
+            button.addEventListener('contextmenu', function (event) {
+                if (!isProjectManager()) {
+                    return;
+                }
+
+                event.preventDefault();
+                openModuleModalForEdit(button);
+            });
+        });
+
+        let connections = [];
+        let persistedConnections = [];
+        let selectedConnectionKey = null;
+        let dragState = null;
+        let drawState = null;
+
+        const anchorStyle = {
+            position: 'absolute',
+            left: '50%',
+            width: '14px',
+            height: '14px',
+            marginLeft: '-7px',
+            borderRadius: '9999px',
+            border: '2px solid #ffffff',
+            background: '#3B82F6',
+            boxShadow: '0 6px 16px rgba(59, 130, 246, 0.35)',
+            cursor: 'crosshair',
+            zIndex: '3'
+        };
+
+        function connectionKey(from, to) {
+            return `${from}->${to}`;
+        }
+
+        function loadStoredPositions() {
+            try {
+                return JSON.parse(localStorage.getItem(storageKey) || '{}');
+            } catch (error) {
+                return {};
+            }
+        }
+
+        function saveStoredPositions() {
+            const positions = {};
+            moduleNodes.forEach((node) => {
+                positions[node.dataset.moduleId] = {
+                    left: parseFloat(node.style.left) || 0,
+                    top: parseFloat(node.style.top) || 0
+                };
+            });
+            localStorage.setItem(storageKey, JSON.stringify(positions));
+        }
+
+        function clampNodePosition(node, left, top) {
+            const maxLeft = Math.max(0, moduleLayer.clientWidth - node.offsetWidth);
+            const maxTop = Math.max(0, moduleLayer.clientHeight - node.offsetHeight);
+            return {
+                left: Math.min(Math.max(0, left), maxLeft),
+                top: Math.min(Math.max(0, top), maxTop)
+            };
+        }
+
+        function applyStoredPositions() {
+            const positions = loadStoredPositions();
+            moduleNodes.forEach((node) => {
+                const stored = positions[node.dataset.moduleId];
+                if (!stored) {
+                    return;
+                }
+                const next = clampNodePosition(node, stored.left, stored.top);
+                node.style.left = `${next.left}px`;
+                node.style.top = `${next.top}px`;
+            });
+        }
+
+        function ensureAnchors(node) {
+            if (node.querySelector('.anchor-in') && node.querySelector('.anchor-out')) {
+                return;
+            }
+
+            const anchorIn = document.createElement('span');
+            anchorIn.className = 'anchor-in';
+            Object.assign(anchorIn.style, anchorStyle, { top: '-7px' });
+
+            const anchorOut = document.createElement('span');
+            anchorOut.className = 'anchor-out';
+            Object.assign(anchorOut.style, anchorStyle, { bottom: '-7px', background: '#0F172A' });
+
+            node.appendChild(anchorIn);
+            node.appendChild(anchorOut);
+        }
+
+        function getAnchorPoint(anchor) {
+            const anchorRect = anchor.getBoundingClientRect();
+            const layerRect = moduleLayer.getBoundingClientRect();
+            return {
+                x: anchorRect.left - layerRect.left + (anchorRect.width / 2),
+                y: anchorRect.top - layerRect.top + (anchorRect.height / 2)
+            };
+        }
+
+        function createPathElement() {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', '#94A3B8');
+            path.setAttribute('stroke-width', '3');
+            path.setAttribute('stroke-linecap', 'round');
+            return path;
+        }
+
+        function createConnectionGroup(connection) {
+            const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            const visiblePath = createPathElement();
+            const hitPath = createPathElement();
+            const key = connectionKey(connection.from, connection.to);
+
+            group.dataset.connectionKey = key;
+            group.style.pointerEvents = 'none';
+
+            hitPath.setAttribute('stroke', 'rgba(15, 23, 42, 0.001)');
+            hitPath.setAttribute('stroke-width', '18');
+
+            group.appendChild(visiblePath);
+            group.appendChild(hitPath);
+            return { group, visiblePath, hitPath, key };
+        }
+
+        function getEventPointOnSvg(event) {
+            const svgRect = canvasSvg.getBoundingClientRect();
+            return {
+                x: event.clientX - svgRect.left,
+                y: event.clientY - svgRect.top
+            };
+        }
+
+        function isPointNearConnection(path, point, threshold = 12) {
+            try {
+                const totalLength = path.getTotalLength();
+                const steps = Math.max(24, Math.ceil(totalLength / 10));
+                for (let index = 0; index <= steps; index += 1) {
+                    const sample = path.getPointAtLength((totalLength * index) / steps);
+                    const dx = sample.x - point.x;
+                    const dy = sample.y - point.y;
+                    if ((dx * dx) + (dy * dy) <= threshold * threshold) {
+                        return true;
+                    }
+                }
+            } catch (error) {
+                return false;
+            }
+            return false;
+        }
+
+        function findConnectionAtPoint(event) {
+            const point = getEventPointOnSvg(event);
+            const groups = Array.from(canvasSvg.querySelectorAll('g[data-connection-key]'));
+
+            for (let index = groups.length - 1; index >= 0; index -= 1) {
+                const group = groups[index];
+                const hitPath = group.querySelector('path:nth-child(2)');
+                const visiblePath = group.querySelector('path:nth-child(1)');
+                const probe = hitPath || visiblePath;
+                if (probe && isPointNearConnection(probe, point)) {
+                    return group.dataset.connectionKey;
+                }
+            }
+
+            return null;
+        }
+
+        function buildPath(fromPoint, toPoint) {
+            const delta = Math.max(60, Math.abs(toPoint.y - fromPoint.y) * 0.45 + 40);
+            return `M ${fromPoint.x} ${fromPoint.y} C ${fromPoint.x} ${fromPoint.y + delta}, ${toPoint.x} ${toPoint.y - delta}, ${toPoint.x} ${toPoint.y}`;
+        }
+
+        function renderConnections() {
+            const tempPath = drawState ? drawState.tempPath : null;
+            canvasSvg.innerHTML = '';
+
+            connections.forEach((connection) => {
+                const fromNode = moduleLayer.querySelector(`button[data-module-id="${connection.from}"]`);
+                const toNode = moduleLayer.querySelector(`button[data-module-id="${connection.to}"]`);
+                if (!fromNode || !toNode) {
+                    return;
+                }
+
+                const fromAnchor = fromNode.querySelector('.anchor-out');
+                const toAnchor = toNode.querySelector('.anchor-in');
+                if (!fromAnchor || !toAnchor) {
+                    return;
+                }
+
+                const { group, visiblePath, hitPath, key } = createConnectionGroup(connection);
+                const d = buildPath(getAnchorPoint(fromAnchor), getAnchorPoint(toAnchor));
+                visiblePath.setAttribute('d', d);
+                hitPath.setAttribute('d', d);
+
+                if (selectedConnectionKey === key) {
+                    visiblePath.setAttribute('stroke', '#2563EB');
+                    visiblePath.setAttribute('stroke-width', '4');
+                }
+
+                canvasSvg.appendChild(group);
+            });
+
+            if (tempPath) {
+                canvasSvg.appendChild(tempPath);
+            }
+        }
+
+        function addConnection(from, to) {
+            if (!from || !to || from === to) {
+                return;
+            }
+            const key = connectionKey(from, to);
+            if (connections.some((item) => connectionKey(item.from, item.to) === key)) {
+                return;
+            }
+            connections.push({ from, to });
+            selectedConnectionKey = key;
+            renderConnections();
+        }
+
+        function beginDrag(event, node) {
+            if (isBatchAdjustmentMode) {
+                return;
+            }
+            if (event.target.closest('.anchor-in, .anchor-out')) {
+                return;
+            }
+            dragState = {
+                node,
+                startX: event.clientX,
+                startY: event.clientY,
+                originLeft: parseFloat(node.style.left) || 0,
+                originTop: parseFloat(node.style.top) || 0,
+                moved: false
+            };
+            node.style.zIndex = '5';
+            event.preventDefault();
+        }
+
+        function updateDrag(event) {
+            if (!dragState) {
+                return;
+            }
+            const deltaX = event.clientX - dragState.startX;
+            const deltaY = event.clientY - dragState.startY;
+            if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+                dragState.moved = true;
+            }
+            const next = clampNodePosition(
+                dragState.node,
+                dragState.originLeft + deltaX,
+                dragState.originTop + deltaY
+            );
+            dragState.node.style.left = `${next.left}px`;
+            dragState.node.style.top = `${next.top}px`;
+            renderConnections();
+        }
+
+        function endDrag() {
+            if (!dragState) {
+                return;
+            }
+            dragState.node.style.zIndex = '2';
+            if (dragState.moved) {
+                saveStoredPositions();
+            }
+            dragState = null;
+        }
+
+        async function handleDirectAssignment(moduleNode, memberId) {
+            if (isAssignmentLockedByAssessmentPeriod()) {
+                showToast('评分期内禁止手动分配', true);
+                return;
+            }
+            const memberCard = document.querySelector(`#project-member-list article[data-member-id="${memberId}"]`);
+            const memberName = memberCard ? memberCard.dataset.memberName : null;
+            try {
+                const response = await fetch(`/assignments/direct/${moduleNode.dataset.moduleId}/${memberId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || '快速分配失败');
+                }
+                assignModuleInDraft(memberId, moduleNode.dataset.moduleId);
+                updateModuleNodePresentation(moduleNode.dataset.moduleId, memberName || `成员 #${memberId}`, memberId, '开发中');
+                showToast(data.message || '快速指派成功');
+            } catch (error) {
+                showToast(error.message || '快速分配失败', true);
+            }
+        }
+
+        function beginLineDraw(event, node) {
+            const anchor = node.querySelector('.anchor-out');
+            if (!anchor) {
+                return;
+            }
+            const tempPath = createPathElement();
+            tempPath.setAttribute('stroke', '#3B82F6');
+            tempPath.setAttribute('stroke-dasharray', '8 6');
+            drawState = {
+                from: node.dataset.moduleId,
+                startAnchor: anchor,
+                tempPath
+            };
+            renderConnections();
+            event.stopPropagation();
+            event.preventDefault();
+        }
+
+        function updateLineDraw(event) {
+            if (!drawState) {
+                return;
+            }
+            const layerRect = moduleLayer.getBoundingClientRect();
+            const pointer = {
+                x: Math.min(Math.max(0, event.clientX - layerRect.left), moduleLayer.clientWidth),
+                y: Math.min(Math.max(0, event.clientY - layerRect.top), moduleLayer.clientHeight)
+            };
+            drawState.tempPath.setAttribute('d', buildPath(getAnchorPoint(drawState.startAnchor), pointer));
+        }
+
+        function endLineDraw(event) {
+            if (!drawState) {
+                return;
+            }
+            const targetAnchor = event.target.closest('.anchor-in');
+            if (targetAnchor) {
+                const targetNode = targetAnchor.closest('button[data-module-id]');
+                if (targetNode) {
+                    addConnection(drawState.from, targetNode.dataset.moduleId);
+                }
+            }
+            drawState = null;
+            renderConnections();
+        }
+
+        async function loadConnections() {
+            try {
+                const response = await fetch(`/projects/${projectId}/dependencies`);
+                if (!response.ok) {
+                    return;
+                }
+                const data = await response.json();
+                persistedConnections = data.map((item) => ({
+                    id: item.id,
+                    from: String(item.preceding_module_id),
+                    to: String(item.dependent_module_id)
+                }));
+                connections = persistedConnections.map((item) => ({ from: item.from, to: item.to }));
+                renderConnections();
+            } catch (error) {
+                showToast('依赖线加载失败', true);
+            }
+        }
+
+        async function saveConnections() {
+            if (!isProjectManager()) {
+                showToast('只有项目创建者才能保存依赖关系', true);
+                return;
+            }
+
+            const currentMemberId = getCurrentMemberId();
+            if (!currentMemberId) {
+                showToast('请先在左下角切换当前视角成员', true);
+                return;
+            }
+
+            try {
+                const persistedMap = new Map(
+                    persistedConnections.map((item) => [connectionKey(item.from, item.to), item])
+                );
+                const currentKeys = new Set(connections.map((item) => connectionKey(item.from, item.to)));
+                const additions = connections.filter((item) => !persistedMap.has(connectionKey(item.from, item.to)));
+                const deletions = persistedConnections.filter((item) => !currentKeys.has(connectionKey(item.from, item.to)));
+
+                if (deletions.length) {
+                    await Promise.all(deletions.map(async (item) => {
+                        const response = await fetch(`/projects/${projectId}/dependencies/${item.id}?current_member_id=${currentMemberId}`, {
+                            method: 'DELETE'
+                        });
+                        if (!response.ok) {
+                            throw new Error('删除旧依赖失败');
+                        }
+                    }));
+                }
+
+                if (additions.length) {
+                    const payload = {
+                        dependencies: additions.map((item) => ({
+                            preceding_module_id: parseInt(item.from, 10),
+                            dependent_module_id: parseInt(item.to, 10)
+                        }))
+                    };
+                    const response = await fetch(`/projects/${projectId}/dependencies?current_member_id=${currentMemberId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        throw new Error(data.detail || '保存失败');
+                    }
+                }
+
+                showToast('保存成功');
+                await loadConnections();
+            } catch (error) {
+                showToast(error.message || '保存失败', true);
+            }
+        }
+
+        moduleNodes.forEach((node) => {
+            ensureAnchors(node);
+            node.style.zIndex = '2';
+            node.draggable = false;
+
+            node.addEventListener('mousedown', function (event) {
+                beginDrag(event, node);
+            });
+
+            node.addEventListener('dragstart', function (event) {
+                if (!isBatchAdjustmentMode) {
+                    event.preventDefault();
+                    return;
+                }
+                if (isAssignmentLockedByAssessmentPeriod()) {
+                    event.preventDefault();
+                    showToast('评分期内禁止手动分配', true);
+                    return;
+                }
+                event.dataTransfer.setData('application/module-id', node.dataset.moduleId);
+                event.dataTransfer.effectAllowed = 'move';
+            });
+
+            node.addEventListener('dragover', function (event) {
+                if (isAssignmentLockedByAssessmentPeriod()) {
+                    node.dataset.dropTarget = 'false';
+                    return;
+                }
+                if (isBatchAdjustmentMode) {
+                    node.dataset.dropTarget = 'false';
+                    return;
+                }
+                event.preventDefault();
+                node.dataset.dropTarget = 'true';
+            });
+
+            node.addEventListener('dragleave', function () {
+                node.dataset.dropTarget = 'false';
+            });
+
+            node.addEventListener('drop', function (event) {
+                event.preventDefault();
+                node.dataset.dropTarget = 'false';
+                if (isBatchAdjustmentMode) {
+                    return;
+                }
+                const memberId = event.dataTransfer.getData('text/plain');
+                if (!memberId) {
+                    return;
+                }
+                handleDirectAssignment(node, memberId);
+            });
+
+            const anchorOut = node.querySelector('.anchor-out');
+            if (anchorOut) {
+                anchorOut.addEventListener('mousedown', function (event) {
+                    beginLineDraw(event, node);
+                });
+            }
+        });
+
+        document.addEventListener('mousemove', function (event) {
+            updateDrag(event);
+            updateLineDraw(event);
+        });
+
+        document.addEventListener('mousedown', function (event) {
+            if (event.button !== 0 || drawState) {
+                return;
+            }
+
+            const hitConnectionKey = findConnectionAtPoint(event);
+            if (hitConnectionKey) {
+                selectedConnectionKey = hitConnectionKey;
+                dragState = null;
+                renderConnections();
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
+            if (!event.target.closest('#project-module-layer button[data-module-id]')) {
+                selectedConnectionKey = null;
+                renderConnections();
+            }
+        }, true);
+
+        document.addEventListener('mouseup', function (event) {
+            endDrag();
+            endLineDraw(event);
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if ((event.key === 'Delete' || event.key === 'Backspace') && selectedConnectionKey) {
+                connections = connections.filter((item) => connectionKey(item.from, item.to) !== selectedConnectionKey);
+                selectedConnectionKey = null;
+                renderConnections();
+            }
+        });
+
+        if (saveButton) {
+            saveButton.onclick = function () {
+                saveConnections();
+            };
+        }
+
+        applyStoredPositions();
+        renderConnections();
+        loadConnections();
+    });
+</script>
+{% endblock %}

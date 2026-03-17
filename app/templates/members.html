@@ -1,0 +1,429 @@
+{% extends "base.html" %}
+
+{% block title %}成员管理{% endblock %}
+
+{% block extra_css %}
+<style>
+    .members-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: var(--space-xl);
+        margin-top: var(--space-lg);
+    }
+
+    .member-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .member-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: var(--space-md);
+        border-bottom: 1px solid var(--border-light);
+        padding-bottom: var(--space-md);
+    }
+
+    .member-name {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--text-main);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .member-actions {
+        display: flex;
+        gap: var(--space-xs);
+    }
+
+    .action-btn {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 4px;
+        border-radius: var(--radius-sm);
+        transition: all var(--trans-fast);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .action-btn:hover {
+        background: var(--bg-surface-hover);
+        color: var(--primary-color);
+    }
+
+    .action-btn.delete:hover {
+        color: var(--danger-color);
+    }
+
+    .member-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+        margin-bottom: var(--space-lg);
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.9rem;
+    }
+
+    .info-label {
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+    }
+
+    .info-value {
+        color: var(--text-main);
+        font-weight: 500;
+    }
+
+    .member-skills {
+        margin-top: auto;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    /* 强行规定在大屏幕下至少3列 */
+    @media (min-width: 1200px) {
+        .members-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 页面头部 -->
+<div class="page-header" style="position: static; border-radius: var(--radius-lg); margin-bottom: var(--space-xl);">
+    <h1 class="page-title">👥 团队成员管理</h1>
+    <button class="btn btn-primary" onclick="openMemberModal()">
+        <span style="font-weight: 800; font-size: 1.2rem; line-height: 1;">+</span> 添加成员
+    </button>
+</div>
+
+<!-- 成员卡片网格 -->
+<div class="members-grid" id="members-container">
+    <!-- 内容将由 JS 动态生成 -->
+    <div style="color: var(--text-muted); padding: var(--space-xl);">正在加载成员数据...</div>
+</div>
+
+<!-- ===================== 弹窗区 ===================== -->
+
+<!-- 1. 添加/编辑成员弹窗 -->
+<div class="modal-overlay" id="member-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 class="modal-title" id="modal-title">添加新成员</h2>
+            <button class="modal-close" onclick="closeMemberModal()">&times;</button>
+        </div>
+        <form id="member-form" onsubmit="handleMemberSubmit(event)">
+            <!-- 隐藏字段，用于判断是编辑还是新增 -->
+            <input type="hidden" id="member-id">
+
+            <div class="form-group">
+                <label for="member-name">姓名</label>
+                <input type="text" id="member-name" class="input-field" required placeholder="请输入成员姓名">
+            </div>
+
+            <div class="form-group">
+                <label for="member-tel">手机号</label>
+                <input type="tel" id="member-tel" class="input-field" required placeholder="用于登录和通知">
+            </div>
+
+            <div class="form-group">
+                <label for="member-skills">技能标签</label>
+                <input type="text" id="member-skills" class="input-field" placeholder="如：Python, 前端, UI设计 (用逗号分隔)">
+            </div>
+
+            <div class="form-group">
+                <label for="member-hours">每周可用时长 (小时)</label>
+                <input type="number" id="member-hours" class="input-field" min="0" step="0.5" value="40" required>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: var(--space-md); margin-top: var(--space-xl);">
+                <button type="button" class="btn btn-secondary" onclick="closeMemberModal()">取消</button>
+                <button type="submit" class="btn btn-primary">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 2. 删除确认弹窗 -->
+<div class="modal-overlay" id="delete-modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+            <h2 class="modal-title" style="color: var(--danger-color);">⚠️ 危险操作</h2>
+            <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+        </div>
+        <p style="margin-bottom: var(--space-xl); color: var(--text-main);">
+            确定要删除成员 <strong id="delete-member-name"></strong> 吗？<br>
+            <span
+                style="color: var(--text-muted); font-size: 0.85rem; margin-top: 8px; display: inline-block;">此操作不可恢复。如果有绑定的任务，可能会导致数据异常。</span>
+        </p>
+        <div style="display: flex; justify-content: flex-end; gap: var(--space-md);">
+            <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">取消</button>
+            <button type="button" class="btn btn-danger" onclick="confirmDelete()">确定删除</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // 全局变量，记录当前要删除的ID
+    let currentDeleteId = null;
+
+    // ==========================================
+    // 页面初始化：获取并在卡片网格渲染成员
+    // ==========================================
+    async function loadMembers() {
+        const container = document.getElementById('members-container');
+        try {
+            const res = await fetch('/members/');
+            if (!res.ok) throw new Error('网络请求失败');
+            const members = await res.json();
+
+            if (members.length === 0) {
+                container.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 4rem; color: var(--text-muted); background: var(--bg-surface); border-radius: var(--radius-lg); border: 1px dashed var(--border-light);">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">👻</div>
+                        <h3>还没有任何成员呢</h3>
+                        <p style="margin-top: 0.5rem; margin-bottom: 1.5rem;">赶快点击右上角添加新团队成员吧！</p>
+                        <button class="btn btn-primary" onclick="openMemberModal()">+ 添加成员</button>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = '';
+
+            members.forEach(member => {
+                // 处理状态样式
+                const statusBadge = member.is_active
+                    ? `<span class="badge badge-success">正常</span>`
+                    : `<span class="badge badge-secondary">停用</span>`;
+
+                // 处理技能标签
+                let skillsHtml = '';
+                if (member.skills) {
+                    const skills = member.skills.split(/[,，]/);
+                    skills.forEach(skill => {
+                        if (skill.trim()) {
+                            skillsHtml += `<span class="badge badge-primary">${skill.trim()}</span>`;
+                        }
+                    });
+                } else {
+                    skillsHtml = `<span style="color: var(--text-muted); font-size: 0.85rem;">暂无标签</span>`;
+                }
+
+                // 准备传给编辑弹窗的数据字典 (需要转义防 XSS)
+                const safeMemberData = encodeURIComponent(JSON.stringify(member));
+
+                const cardHtml = `
+                    <div class="card member-card">
+                        <div class="member-header">
+                            <div class="member-name">
+                                ${member.name}
+                                ${statusBadge}
+                            </div>
+                            <div class="member-actions">
+                                <button class="action-btn" title="编辑" onclick="openMemberModal('${safeMemberData}')">
+                                    ✏️
+                                </button>
+                                <button class="action-btn delete" title="删除" onclick="openDeleteModal(${member.id}, '${member.name}')">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="member-info">
+                            <div class="info-row">
+                                <span class="info-label">手机号码</span>
+                                <span class="info-value">${member.tel}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="info-label">可用时长</span>
+                                <span class="info-value">${member.available_hours} h/周</span>
+                            </div>
+                        </div>
+                        
+                        <div class="info-label" style="margin-bottom: var(--space-xs);">技能专长</div>
+                        <div class="member-skills">
+                            ${skillsHtml}
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += cardHtml;
+            });
+
+        } catch (error) {
+            console.error('获取成员列表失败：', error);
+            showToast('获取成员列表失败，请重试！', true);
+            container.innerHTML = `<div style="color: var(--danger-color); padding: var(--space-xl);">⚠️ 加载数据失败：${error.message}</div>`;
+        }
+    }
+
+    // ==========================================
+    // 弹窗控制逻辑
+    // ==========================================
+
+    // 打开成员弹窗 (有参数就是编辑，没参数就是新增)
+    function openMemberModal(encodedData) {
+        const modal = document.getElementById('member-modal');
+        const form = document.getElementById('member-form');
+        const title = document.getElementById('modal-title');
+
+        form.reset(); // 清空表单
+
+        if (encodedData) {
+            // 编辑模式
+            title.textContent = "✎ 编辑成员信息";
+            try {
+                const member = JSON.parse(decodeURIComponent(encodedData));
+                document.getElementById('member-id').value = member.id;
+                document.getElementById('member-name').value = member.name;
+                document.getElementById('member-tel').value = member.tel;
+                document.getElementById('member-skills').value = member.skills || '';
+                document.getElementById('member-hours').value = member.available_hours || 0;
+            } catch (e) {
+                console.error("解析成员数据失败", e);
+            }
+        } else {
+            // 新增模式
+            title.textContent = "+ 添加新成员";
+            document.getElementById('member-id').value = '';
+        }
+
+        modal.classList.add('active');
+    }
+
+    // 关闭成员弹窗
+    function closeMemberModal() {
+        document.getElementById('member-modal').classList.remove('active');
+    }
+
+    // 打开删除弹窗
+    function openDeleteModal(id, name) {
+        currentDeleteId = id;
+        document.getElementById('delete-member-name').textContent = name;
+        document.getElementById('delete-modal').classList.add('active');
+    }
+
+    // 关闭删除弹窗
+    function closeDeleteModal() {
+        currentDeleteId = null;
+        document.getElementById('delete-modal').classList.remove('active');
+    }
+
+
+    // ==========================================
+    // CRUD 交互逻辑
+    // ==========================================
+
+    // 处理表单提交 (新增 or 更新)
+    async function handleMemberSubmit(event) {
+        event.preventDefault(); // 阻止默认刷新
+
+        const id = document.getElementById('member-id').value;
+        const submitBtn = event.target.querySelector('button[type="submit"]');
+
+        // 构造 payload
+        const payload = {
+            name: document.getElementById('member-name').value.trim(),
+            tel: document.getElementById('member-tel').value.trim(),
+            skills: document.getElementById('member-skills').value.trim(),
+            available_hours: parseFloat(document.getElementById('member-hours').value)
+        };
+
+        const isEdit = !!id;
+        const url = isEdit ? `/members/${id}` : '/members/';
+        const method = isEdit ? 'PUT' : 'POST';
+
+        try {
+            submitBtn.disabled = true;
+            submitBtn.textContent = "保存中...";
+
+            const res = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.detail || '操作失败');
+            }
+
+            showToast(isEdit ? '编辑成员成功！' : '添加成员成功！');
+            closeMemberModal();
+            loadMembers(); // 重新加载列表
+
+            // 重要：刷新左下角的全局角色选择器 (由 base.html 提供)
+            if (typeof loadGlobalIdentities === 'function') {
+                loadGlobalIdentities();
+            }
+
+        } catch (error) {
+            console.error('提交失败:', error);
+            showToast(error.message, true);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "保存";
+        }
+    }
+
+    // 处理确定删除
+    async function confirmDelete() {
+        if (!currentDeleteId) return;
+
+        const btn = document.querySelector('#delete-modal .btn-danger');
+
+        try {
+            btn.disabled = true;
+            btn.textContent = "删除中...";
+
+            const res = await fetch(`/members/${currentDeleteId}`, {
+                method: 'DELETE'
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.detail || '删除失败');
+            }
+
+            showToast('已成功删除该成员');
+            closeDeleteModal();
+            loadMembers(); // 重新加载列表
+
+            // 重要：刷新左下角的全局角色选择器 (由 base.html 提供)
+            if (typeof loadGlobalIdentities === 'function') {
+                loadGlobalIdentities();
+            }
+
+        } catch (error) {
+            console.error('删除失败:', error);
+            showToast(error.message, true);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "确定删除";
+        }
+    }
+
+    // 页面加载完毕执行
+    document.addEventListener('DOMContentLoaded', () => {
+        loadMembers();
+    });
+</script>
+{% endblock %}

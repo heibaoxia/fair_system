@@ -1,0 +1,397 @@
+{% extends "base.html" %}
+
+{% block title %}我的待办与财务{% endblock %}
+
+{% block extra_css %}
+<style>
+    .todo-shell {
+        padding: 20px;
+        max-width: 1080px;
+        margin: 0 auto;
+    }
+
+    .todo-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+
+    .todo-column {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .todo-card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+    }
+
+    .todo-card h3 {
+        margin-top: 0;
+    }
+
+    .todo-card p {
+        color: #64748b;
+    }
+
+    .todo-card.assessment-card {
+        border: 1px solid #fca5a5;
+    }
+
+    .todo-card.work-card {
+        border: 1px solid #bae6fd;
+    }
+
+    .todo-card.review-card {
+        border: 1px solid #fed7aa;
+    }
+
+    .todo-card.wallet-card {
+        border: 1px solid #bbf7d0;
+    }
+
+    .todo-card.swap-card {
+        border: 1px solid #c4b5fd;
+    }
+
+    .todo-summary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 16px 0;
+    }
+
+    .todo-summary span {
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #fee2e2;
+        color: #b91c1c;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .todo-summary span.is-muted {
+        background: #e2e8f0;
+        color: #475569;
+    }
+
+    .assessment-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .assessment-item {
+        padding: 14px;
+        border-radius: 10px;
+        border-left: 4px solid #ef4444;
+        background: #fef2f2;
+    }
+
+    .assessment-item.is-urgent {
+        background: #fee2e2;
+        box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.2);
+    }
+
+    .assessment-item.is-expired {
+        border-left-color: #94a3b8;
+        background: #f8fafc;
+        color: #64748b;
+    }
+
+    .assessment-item-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .assessment-item-title {
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .assessment-item.is-expired .assessment-item-title {
+        color: #475569;
+    }
+
+    .assessment-item-meta {
+        margin-top: 8px;
+        display: grid;
+        gap: 4px;
+        font-size: 14px;
+        color: #475569;
+    }
+
+    .assessment-item-actions {
+        margin-top: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .todo-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .todo-badge.urgent {
+        background: #dc2626;
+        color: white;
+    }
+
+    .todo-badge.expired {
+        background: #cbd5e1;
+        color: #334155;
+    }
+
+    .todo-empty {
+        padding: 16px;
+        border-radius: 10px;
+        background: #f8fafc;
+        color: #64748b;
+        border: 1px dashed #cbd5e1;
+    }
+
+    .wallet-metrics {
+        display: grid;
+        gap: 12px;
+        margin-top: 18px;
+    }
+
+    .wallet-metric {
+        padding: 14px 16px;
+        border-radius: 10px;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+    }
+
+    .wallet-metric strong {
+        display: block;
+        font-size: 13px;
+        color: #166534;
+        margin-bottom: 6px;
+    }
+
+    .wallet-metric span {
+        font-size: 24px;
+        font-weight: 800;
+        color: #14532d;
+    }
+
+    @media (max-width: 900px) {
+        .todo-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="todo-shell">
+    <h1 style="margin-bottom: 20px;">📝 我的待办与钱袋子</h1>
+    <p style="color: #666; margin-bottom: 30px;">（我们把那些引起攀比的公共财富榜单删除了。你的财富积累都在这里，仅对自己可见！）</p>
+
+    <div class="todo-grid">
+        <div class="todo-column">
+            <div class="todo-card assessment-card">
+                <h3 style="color: #ef4444; margin-top:0;">🎯 需要我打分评估的模块</h3>
+                <p style="font-size: 14px;">项目经理开放评分期后，待评分模块会在这里实时出现；临近截止会自动标红提醒。</p>
+
+                <div class="todo-summary">
+                    <span>待打分 {{ pending_data.total_pending or 0 }} 项</span>
+                    <span class="is-muted">已超期 {{ pending_data.total_expired or 0 }} 项</span>
+                </div>
+
+                <div class="assessment-list">
+                    {% if pending_data.pending %}
+                        {% for item in pending_data.pending %}
+                        <article class="assessment-item{% if item.is_urgent %} is-urgent{% endif %}{% if item.is_expired %} is-expired{% endif %}">
+                            <div class="assessment-item-header">
+                                <div>
+                                    <div class="assessment-item-title">[{{ item.project_name }}] {{ item.module_name }}</div>
+                                    {% if item.module_description %}
+                                    <div style="margin-top: 6px; font-size: 14px; color: #64748b;">{{ item.module_description }}</div>
+                                    {% endif %}
+                                </div>
+                                {% if item.is_expired %}
+                                <span class="todo-badge expired">已超期</span>
+                                {% elif item.is_urgent %}
+                                <span class="todo-badge urgent">24h 内截止</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="assessment-item-meta">
+                                <span>截止时间：{{ item.assessment_end.replace('T', ' ')[:16] }}</span>
+                                {% if item.is_expired %}
+                                <span>状态：已超期，无法打分</span>
+                                {% else %}
+                                <span>倒计时：剩余 {{ '%.1f'|format(item.remaining_hours) }} 小时</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="assessment-item-actions">
+                                {% if item.is_expired %}
+                                <span style="font-size: 13px; color: #64748b;">已超期，无法打分</span>
+                                {% else %}
+                                <a class="btn btn-primary" href="/project/{{ item.project_id }}?module_id={{ item.module_id }}">立即打分</a>
+                                {% endif %}
+                            </div>
+                        </article>
+                        {% endfor %}
+                    {% elif member_id %}
+                    <div class="todo-empty">当前没有需要你处理的待评分模块。</div>
+                    {% else %}
+                    <div class="todo-empty">请先在左下角切换当前视角成员，系统会自动加载你的待评分列表。</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="todo-card work-card">
+                <h3 style="color: #0284c7; margin-top:0;">🔧 我正在进行的工作代码</h3>
+                <p style="font-size: 14px;">（抢单成功或被分配给你的模块，在这里上传最终产出）</p>
+
+                <div class="assessment-list">
+                    {% if active_work_modules %}
+                        {% for item in active_work_modules %}
+                        <article class="assessment-item" style="border-left-color:#0ea5e9; background:#f0f9ff;">
+                            <div class="assessment-item-header">
+                                <div>
+                                    <div class="assessment-item-title">{{ item.module_name }}</div>
+                                    <div style="margin-top: 6px; font-size: 14px; color: #64748b;">所属项目：{{ item.project_name }}</div>
+                                </div>
+                                <span class="todo-badge expired" style="background:#e0f2fe; color:#0369a1;">{{ item.status }}</span>
+                            </div>
+
+                            <div class="assessment-item-meta">
+                                <span>状态：{{ item.status }}</span>
+                            </div>
+
+                            <div class="assessment-item-actions">
+                                <a class="btn btn-primary" href="/project/{{ item.project_id }}?module_id={{ item.module_id }}">上传文件</a>
+                            </div>
+                        </article>
+                        {% endfor %}
+                    {% elif member_id %}
+                    <div class="todo-empty">当前没有你负责且正在开发中的模块。</div>
+                    {% else %}
+                    <div class="todo-empty">请先在左下角切换当前视角成员，系统会自动加载你的开发中模块。</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="todo-card swap-card">
+                <h3 style="color: #7c3aed; margin-top:0;">🔄 模块交换请求</h3>
+                <p style="font-size: 14px;">项目经理发起的模块替换或交换会出现在这里，你可以选择接受或拒绝。</p>
+
+                <div class="assessment-list">
+                    {% if pending_swaps %}
+                        {% for item in pending_swaps %}
+                        <article class="assessment-item" data-swap-id="{{ item.id }}">
+                            <div class="assessment-item-header">
+                                <div>
+                                    <div class="assessment-item-title">[{{ item.project_name }}] {{ item.module_name }}</div>
+                                    <div style="margin-top: 6px; font-size: 14px; color: #64748b;">
+                                        发起人：{{ item.initiator_name }}
+                                        {% if item.swap_type == 'swap' and item.swap_module_name %}
+                                        ｜ 交换模块：{{ item.swap_module_name }}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <span class="todo-badge expired" style="background:#ede9fe; color:#6d28d9;">待确认</span>
+                            </div>
+
+                            <div class="assessment-item-meta">
+                                <span>当前负责人：{{ item.from_member_name }} → 目标负责人：{{ item.to_member_name }}</span>
+                                {% if item.reason %}
+                                <span>说明理由：{{ item.reason }}</span>
+                                {% else %}
+                                <span>说明理由：未填写</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="assessment-item-actions">
+                                <button type="button" class="btn btn-primary" onclick="resolveSwapRequest({{ item.id }}, 'accept')">接受</button>
+                                <button type="button" class="btn btn-secondary" onclick="resolveSwapRequest({{ item.id }}, 'reject')">拒绝</button>
+                            </div>
+                        </article>
+                        {% endfor %}
+                    {% elif member_id %}
+                    <div class="todo-empty">当前没有待处理的模块交换请求。</div>
+                    {% else %}
+                    <div class="todo-empty">请先在左下角切换当前视角成员，系统会自动加载你的交换请求。</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="todo-column">
+            <div class="todo-card review-card">
+                <h3 style="color: #f97316; margin-top:0;">🧐 我要审核的产出 (经理专属)</h3>
+                <p style="font-size: 14px;">（别人把活干完了传上来，你需要点通过，他们才能拿到钱）</p>
+            </div>
+
+            <div class="todo-card wallet-card">
+                <h3 style="color: #16a34a; margin-top:0;">💰 我的钱包待结</h3>
+                <p style="font-size: 14px;">（所有你已完成通过审核、但项目还在进行中的钱会在这里积攒。等项目整体完结，会自动打入你的账户）</p>
+
+                <div class="wallet-metrics">
+                    <div class="wallet-metric">
+                        <strong>已结算金额</strong>
+                        <span>{{ '%.2f'|format(wallet_summary.settled_amount or 0) }} 元</span>
+                    </div>
+                    <div class="wallet-metric">
+                        <strong>待结算预估</strong>
+                        <span>{{ '%.2f'|format(wallet_summary.pending_estimated_amount or 0) }} 元</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function resolveSwapRequest(swapId, action) {
+        const currentMemberId = getCurrentMemberId();
+        if (!currentMemberId) {
+            alert('请先切换当前视角成员');
+            return;
+        }
+
+        const actionText = action === 'accept' ? '接受' : '拒绝';
+        try {
+            const response = await fetch(`/swaps/${swapId}/${action}?member_id=${currentMemberId}`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || `${actionText}交换请求失败`);
+            }
+            alert(data.message || `已${actionText}`);
+            window.location.reload();
+        } catch (error) {
+            alert(error.message || `${actionText}交换请求失败`);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const currentMemberId = getCurrentMemberId();
+        const url = new URL(window.location.href);
+        const memberId = url.searchParams.get('member_id');
+
+        if (currentMemberId && memberId !== String(currentMemberId)) {
+            url.searchParams.set('member_id', currentMemberId);
+            window.location.replace(url.toString());
+        }
+    });
+</script>
+{% endblock %}

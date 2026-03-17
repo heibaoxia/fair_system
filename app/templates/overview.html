@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}项目总览大盘{% endblock %}
+
+{% block content %}
+<div style="padding: 20px; max-width: 1000px; margin: 0 auto;">
+    <h1 style="margin-bottom: 20px;">📊 全公司项目上帝视角大盘</h1>
+    <p style="color: #666; margin-bottom: 30px;">与首页只在乎你自己的项目不同。这里你能看到全公司每个角落的项目进度。（线框状态占位）</p>
+
+    <div style="display: flex; flex-direction: column; gap: 15px;">
+        {% for p in projects|default([]) %}
+        <div
+            style="background: white; border: 1px solid #eee; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h3>{{ p.name }} <span style="font-size: 14px; font-weight: normal; color: #8b5cf6;">[{{ p.status
+                        }}]</span></h3>
+                <p style="color: #888; font-size: 14px;">{{ p.description }}</p>
+            </div>
+            <div>
+                <a href="/project/{{ p.id }}"
+                    style="text-decoration: none; color: white; background: #6366f1; padding: 8px 16px; border-radius: 4px;">透视详情</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

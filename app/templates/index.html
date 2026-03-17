@@ -1,0 +1,844 @@
+{% extends "base.html" %}
+
+{% block title %}🏠 工作台{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dashboard-shell {
+        padding: 32px;
+    }
+
+    .dashboard-hero {
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 24px;
+        padding: 32px;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 28px;
+        background:
+            radial-gradient(circle at top right, rgba(14, 165, 233, 0.18), transparent 32%),
+            linear-gradient(135deg, #f8fbff 0%, #eef6ff 52%, #f7fafc 100%);
+        box-shadow: 0 22px 50px rgba(15, 23, 42, 0.08);
+    }
+
+    .dashboard-hero::after {
+        content: "";
+        position: absolute;
+        right: -48px;
+        bottom: -56px;
+        width: 200px;
+        height: 200px;
+        border-radius: 50%;
+        background: rgba(59, 130, 246, 0.08);
+    }
+
+    .dashboard-hero h1 {
+        margin-bottom: 10px;
+        font-size: 2rem;
+    }
+
+    .dashboard-hero p {
+        max-width: 720px;
+        color: var(--text-muted);
+        font-size: 0.98rem;
+    }
+
+    .hero-actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+    }
+
+    .ghost-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.68rem 1.2rem;
+        border: 1px solid rgba(15, 23, 42, 0.1);
+        border-radius: 999px;
+        color: var(--text-main);
+        text-decoration: none;
+        background: rgba(255, 255, 255, 0.78);
+        transition: transform var(--trans-fast), box-shadow var(--trans-fast);
+    }
+
+    .ghost-link:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .stat-card {
+        padding: 22px;
+        border-radius: 22px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .stat-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 14px;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 800;
+        line-height: 1;
+        color: var(--text-main);
+    }
+
+    .stat-note {
+        margin-top: 10px;
+        color: var(--text-muted);
+        font-size: 0.88rem;
+    }
+
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
+        gap: 20px;
+        align-items: start;
+    }
+
+    .quick-actions {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .quick-action {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .quick-action p {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    .quick-action-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .panel {
+        padding: 24px;
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .panel-head h2 {
+        font-size: 1.2rem;
+        margin-bottom: 4px;
+    }
+
+    .panel-head p,
+    .project-meta,
+    .empty-state,
+    .status-caption,
+    .team-tip {
+        color: var(--text-muted);
+    }
+
+    .project-list {
+        display: grid;
+        gap: 14px;
+    }
+
+    .project-item {
+        display: block;
+        padding: 18px 20px;
+        border-radius: 20px;
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+        text-decoration: none;
+        color: inherit;
+        transition: transform var(--trans-fast), box-shadow var(--trans-fast), border-color var(--trans-fast);
+    }
+
+    .project-item:hover {
+        transform: translateY(-2px);
+        border-color: rgba(59, 130, 246, 0.28);
+        box-shadow: var(--shadow-md);
+    }
+
+    .god-mode-banner {
+        margin-top: 16px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(239, 68, 68, 0.12);
+        color: #991b1b;
+        font-size: 0.9rem;
+        font-weight: 700;
+    }
+
+    .god-mode-banner[hidden] {
+        display: none;
+    }
+
+    .context-menu {
+        position: fixed;
+        z-index: 1200;
+        min-width: 180px;
+        padding: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow: 0 18px 36px rgba(15, 23, 42, 0.18);
+    }
+
+    .context-menu[hidden] {
+        display: none;
+    }
+
+    .context-menu button {
+        width: 100%;
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 12px;
+        text-align: left;
+        background: transparent;
+        cursor: pointer;
+        color: #0f172a;
+        font-size: 0.92rem;
+    }
+
+    .context-menu button:hover {
+        background: #fff1f2;
+        color: #b91c1c;
+    }
+
+    .context-menu .danger {
+        color: #b91c1c;
+        font-weight: 700;
+    }
+
+    .project-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+
+    .project-name {
+        font-size: 1.08rem;
+        font-weight: 700;
+    }
+
+    .project-desc {
+        margin-bottom: 14px;
+        color: #475569;
+        font-size: 0.94rem;
+    }
+
+    .project-metrics {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+    }
+
+    .project-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .project-summary-card {
+        padding: 12px 14px;
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: #f8fbff;
+    }
+
+    .project-summary-label {
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        margin-bottom: 6px;
+    }
+
+    .project-summary-value {
+        color: var(--text-main);
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    .project-summary-value.is-pending {
+        color: #64748b;
+    }
+
+    .project-progress {
+        margin-bottom: 14px;
+    }
+
+    .progress-label {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+        font-size: 0.86rem;
+        color: var(--text-muted);
+    }
+
+    .progress-track {
+        width: 100%;
+        height: 10px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e2e8f0;
+    }
+
+    .progress-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+    }
+
+    .project-foot {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        font-size: 0.88rem;
+        color: var(--text-muted);
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 72px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 700;
+    }
+
+    .status-preparing {
+        color: #92400e;
+        background: #fff7ed;
+    }
+
+    .status-active {
+        color: #0f766e;
+        background: #ecfeff;
+    }
+
+    .status-done {
+        color: #166534;
+        background: #ecfdf5;
+    }
+
+    .status-other {
+        color: #334155;
+        background: #f1f5f9;
+    }
+
+    .status-stack {
+        display: grid;
+        gap: 14px;
+    }
+
+    .status-row {
+        display: grid;
+        grid-template-columns: 88px 1fr auto;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .status-bar {
+        height: 10px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e2e8f0;
+    }
+
+    .status-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #38bdf8 0%, #2563eb 100%);
+    }
+
+    .team-pill-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+    }
+
+    .team-pill {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #f8fafc;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        color: #334155;
+        font-size: 0.86rem;
+    }
+
+    .empty-state {
+        padding: 36px 20px;
+        text-align: center;
+        border: 1px dashed rgba(148, 163, 184, 0.4);
+        border-radius: 20px;
+        background: #f8fafc;
+    }
+
+    @media (max-width: 1120px) {
+        .stats-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .quick-actions {
+            grid-template-columns: 1fr;
+        }
+
+        .dashboard-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 720px) {
+        .dashboard-shell {
+            padding: 18px;
+        }
+
+        .dashboard-hero,
+        .panel,
+        .stat-card {
+            padding: 20px;
+            border-radius: 20px;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .quick-action-row {
+            flex-direction: column;
+        }
+
+        .project-top,
+        .panel-head,
+        .project-foot,
+        .status-row {
+            grid-template-columns: 1fr;
+            display: grid;
+        }
+
+        .project-foot {
+            gap: 6px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set stats = namespace(ongoing=0, completed=0, preparing=0, member_ids=[]) %}
+{% for project in projects %}
+    {% if project.status == "进行中" %}
+        {% set stats.ongoing = stats.ongoing + 1 %}
+    {% elif project.status == "已完成" %}
+        {% set stats.completed = stats.completed + 1 %}
+    {% elif project.status == "筹备中" %}
+        {% set stats.preparing = stats.preparing + 1 %}
+    {% endif %}
+
+    {% for member in project.members %}
+        {% if member.id not in stats.member_ids %}
+            {% set stats.member_ids = stats.member_ids + [member.id] %}
+        {% endif %}
+    {% endfor %}
+{% endfor %}
+
+<div class="dashboard-shell">
+    <section class="dashboard-hero">
+        <h1>🏠 工作台</h1>
+        <p>这里集中展示当前项目池的整体状态、关键进展和团队协作分布，让你一进入系统就能快速判断今天该盯哪里。</p>
+        <div class="hero-actions">
+            <a href="/overview" class="btn btn-primary">查看项目总览</a>
+            <a href="/members" class="ghost-link">管理团队成员</a>
+            <a href="/todo" class="ghost-link">进入我的待办</a>
+        </div>
+        <div id="god-mode-banner" class="god-mode-banner" hidden>当前：上帝视角，可右键项目卡片删除</div>
+    </section>
+
+    <section class="stats-grid">
+        <article class="stat-card">
+            <div class="stat-label">📦 项目总数</div>
+            <div class="stat-value">{{ projects | length }}</div>
+            <div class="stat-note">当前工作台纳管的全部项目。</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-label">🚀 进行中项目</div>
+            <div class="stat-value">{{ stats.ongoing }}</div>
+            <div class="stat-note">正在推进、需要重点跟踪的项目。</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-label">✅ 已完成项目</div>
+            <div class="stat-value">{{ stats.completed }}</div>
+            <div class="stat-note">已经交付或收尾完成的项目。</div>
+        </article>
+        <article class="stat-card">
+            <div class="stat-label">👥 团队成员数</div>
+            <div class="stat-value" id="member-count" data-fallback="{{ stats.member_ids | length }}">{{ stats.member_ids | length }}</div>
+            <div class="stat-note">通过成员接口动态获取最新人数。</div>
+        </article>
+    </section>
+
+    <section class="quick-actions">
+        <article class="panel quick-action">
+            <div>
+                <h2>快捷操作</h2>
+                <p>快速发起新项目，默认以成员 `#1` 的身份创建。</p>
+            </div>
+            <div class="quick-action-row">
+                <button type="button" class="btn btn-primary" onclick="createProjectQuickly()">+ 新建项目</button>
+            </div>
+        </article>
+        <article class="panel quick-action">
+            <div>
+                <h2>项目视图</h2>
+                <p>切换到总览页，查看全部项目的统一列表。</p>
+            </div>
+            <div class="quick-action-row">
+                <a href="/overview" class="ghost-link">进入项目总览</a>
+            </div>
+        </article>
+        <article class="panel quick-action">
+            <div>
+                <h2>协作入口</h2>
+                <p>前往成员管理或我的待办，继续跟进协作事项。</p>
+            </div>
+            <div class="quick-action-row">
+                <a href="/members" class="ghost-link">成员管理</a>
+                <a href="/todo" class="ghost-link">我的待办</a>
+            </div>
+        </article>
+    </section>
+
+    <section class="dashboard-grid">
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2>项目列表</h2>
+                    <p>点击任一项目可进入详情页继续管理。</p>
+                </div>
+                <a href="/overview" class="ghost-link">全部项目</a>
+            </div>
+
+            {% if projects %}
+            <div class="project-list">
+                {% for card in project_cards %}
+                {% set project = card.project %}
+                {% set summary = card.summary %}
+                {% set total_modules = project.modules | length %}
+                {% set module_stats = namespace(completed=0) %}
+                {% for module in project.modules %}
+                    {% if module.status == "已完成" %}
+                        {% set module_stats.completed = module_stats.completed + 1 %}
+                    {% endif %}
+                {% endfor %}
+                {% set progress_pct = (module_stats.completed / total_modules * 100) if total_modules else 0 %}
+                <a href="/project/{{ project.id }}" class="project-item card" data-project-id="{{ project.id }}" data-project-name="{{ project.name }}">
+                    <div class="project-top">
+                        <div>
+                            <div class="project-name">{{ project.name }}</div>
+                            <div class="project-meta">项目 ID：#{{ project.id }}</div>
+                        </div>
+                        {% if project.status == "筹备中" %}
+                        <span class="badge badge-warning">{{ project.status }}</span>
+                        {% elif project.status == "进行中" %}
+                        <span class="badge badge-primary">{{ project.status }}</span>
+                        {% elif project.status == "已完成" %}
+                        <span class="badge badge-success">{{ project.status }}</span>
+                        {% else %}
+                        <span class="badge badge-secondary">{{ project.status or "未设置" }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="project-desc">{{ project.description or "暂无项目简介，点击进入详情页补充背景与说明。" }}</div>
+                    <div class="project-metrics">
+                        <span class="badge badge-secondary">模块数 {{ total_modules }}</span>
+                        <span class="badge badge-secondary">成员 {{ project.members | length }}</span>
+                    </div>
+                    <div class="project-summary-grid">
+                        <div class="project-summary-card">
+                            <div class="project-summary-label">项目综合评分</div>
+                            <div class="project-summary-value{% if not summary.is_summarized %} is-pending{% endif %}">
+                                {% if summary.is_summarized %}
+                                {{ '%.2f'|format(summary.project_composite_score) }}
+                                {% else %}
+                                待汇总
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="project-summary-card">
+                            <div class="project-summary-label">项目预估时间</div>
+                            <div class="project-summary-value{% if not summary.is_summarized %} is-pending{% endif %}">
+                                {% if summary.is_summarized %}
+                                {{ '%.2f'|format(summary.project_estimated_hours) }} 小时
+                                {% else %}
+                                待汇总
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="project-progress">
+                        <div class="progress-label">
+                            <span>已完成 {{ module_stats.completed }}/{{ total_modules }} 模块</span>
+                            <span>{{ '%.0f'|format(progress_pct) }}%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill" style="width: {{ progress_pct }}%;"></div>
+                        </div>
+                    </div>
+                    <div class="project-foot">
+                        <span>点击进入项目详情 / 画板页</span>
+                        <span>创建时间 {{ project.created_at.strftime('%Y-%m-%d') if project.created_at else '未知' }}</span>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>还没有任何项目，点一下上方“新建项目”开始搭建你的第一个协作空间。</p>
+            </div>
+            {% endif %}
+        </article>
+
+        <aside class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2>状态概览</h2>
+                    <p>项目池当前的推进分布。</p>
+                </div>
+            </div>
+
+            {% set total_projects = projects | length %}
+            <div class="status-stack">
+                <div class="status-row">
+                    <span>筹备中</span>
+                    <div class="status-bar">
+                        <div class="status-fill" style="width: {{ (stats.preparing / total_projects * 100) if total_projects else 0 }}%;"></div>
+                    </div>
+                    <strong>{{ stats.preparing }}</strong>
+                </div>
+                <div class="status-row">
+                    <span>进行中</span>
+                    <div class="status-bar">
+                        <div class="status-fill" style="width: {{ (stats.ongoing / total_projects * 100) if total_projects else 0 }}%;"></div>
+                    </div>
+                    <strong>{{ stats.ongoing }}</strong>
+                </div>
+                <div class="status-row">
+                    <span>已完成</span>
+                    <div class="status-bar">
+                        <div class="status-fill" style="width: {{ (stats.completed / total_projects * 100) if total_projects else 0 }}%;"></div>
+                    </div>
+                    <strong>{{ stats.completed }}</strong>
+                </div>
+            </div>
+
+            <p class="status-caption" style="margin-top: 18px;">项目数量由模板直接根据 `projects` 计算，成员数则在页面加载后通过 `/members/` 动态获取。</p>
+
+            {% if stats.member_ids | length > 0 %}
+            <div class="team-pill-list">
+                {% for project in projects[:4] %}
+                <span class="team-pill">{{ project.name }} · {{ project.members | length }} 人</span>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="team-tip" style="margin-top: 18px;">目前还没有关联成员，成员数会在项目开始协作后自动累计。</p>
+            {% endif %}
+        </aside>
+    </section>
+</div>
+
+<div id="project-context-menu" class="context-menu" hidden>
+    <button type="button" id="project-delete-action" class="danger">删除项目</button>
+</div>
+
+<script>
+    let contextProjectTarget = null;
+
+    async function createProjectQuickly() {
+        const name = window.prompt('请输入项目名称');
+        if (!name) return;
+
+        const description = window.prompt('请输入项目描述（可留空）') || '通过工作台快捷创建';
+
+        try {
+            const response = await fetch('/projects/?created_by_member_id=1', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name,
+                    description
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
+
+            showToast('项目创建成功');
+            setTimeout(() => window.location.reload(), 500);
+        } catch (error) {
+            console.error('创建项目失败', error);
+            showToast('创建项目失败，请检查成员 #1 是否存在', true);
+        }
+    }
+
+    async function loadDashboardMemberCount() {
+        const counter = document.getElementById('member-count');
+        if (!counter) return;
+
+        try {
+            const response = await fetch('/members/');
+            if (!response.ok) {
+                throw new Error('failed to load members');
+            }
+
+            const members = await response.json();
+            counter.textContent = Array.isArray(members) ? members.length : counter.dataset.fallback;
+        } catch (error) {
+            console.error('加载成员数量失败', error);
+            counter.textContent = counter.dataset.fallback || '--';
+        }
+    }
+
+    function updateGodModeBanner() {
+        const banner = document.getElementById('god-mode-banner');
+        if (!banner) return;
+        banner.hidden = !isGodMode();
+    }
+
+    function hideProjectContextMenu() {
+        const menu = document.getElementById('project-context-menu');
+        if (!menu) return;
+        menu.hidden = true;
+        contextProjectTarget = null;
+    }
+
+    function showProjectContextMenu(event, projectCard) {
+        const menu = document.getElementById('project-context-menu');
+        if (!menu) return;
+
+        contextProjectTarget = projectCard;
+        menu.hidden = false;
+        const maxLeft = Math.max(12, window.innerWidth - menu.offsetWidth - 12);
+        const maxTop = Math.max(12, window.innerHeight - menu.offsetHeight - 12);
+        menu.style.left = `${Math.min(event.clientX, maxLeft)}px`;
+        menu.style.top = `${Math.min(event.clientY, maxTop)}px`;
+    }
+
+    async function deleteProjectAsGod() {
+        if (!contextProjectTarget) {
+            return;
+        }
+
+        const projectId = contextProjectTarget.dataset.projectId;
+        const projectName = contextProjectTarget.dataset.projectName || `#${projectId}`;
+        hideProjectContextMenu();
+
+        if (!window.confirm(`确认删除项目“${projectName}”吗？此操作会一并删除关联模块、评分、文件和依赖。`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/projects/${projectId}?current_member_id=0`, {
+                method: 'DELETE'
+            });
+
+            if (!response.ok) {
+                let message = '删除项目失败';
+                try {
+                    const data = await response.json();
+                    message = data.detail || message;
+                } catch (error) {
+                    // ignore json parse failure
+                }
+                throw new Error(message);
+            }
+
+            showToast(`项目已删除：${projectName}`);
+            setTimeout(() => window.location.reload(), 500);
+        } catch (error) {
+            showToast(error.message || '删除项目失败', true);
+        }
+    }
+
+    function bindProjectContextMenu() {
+        const menu = document.getElementById('project-context-menu');
+        const deleteAction = document.getElementById('project-delete-action');
+        const cards = document.querySelectorAll('.project-item[data-project-id]');
+
+        cards.forEach((card) => {
+            card.addEventListener('contextmenu', (event) => {
+                if (!isGodMode()) {
+                    return;
+                }
+                event.preventDefault();
+                showProjectContextMenu(event, card);
+            });
+        });
+
+        if (deleteAction) {
+            deleteAction.addEventListener('click', deleteProjectAsGod);
+        }
+
+        document.addEventListener('click', (event) => {
+            if (!menu || menu.hidden) {
+                return;
+            }
+            if (!menu.contains(event.target)) {
+                hideProjectContextMenu();
+            }
+        });
+
+        window.addEventListener('scroll', hideProjectContextMenu, true);
+        window.addEventListener('resize', hideProjectContextMenu);
+        window.addEventListener('storage', () => {
+            updateGodModeBanner();
+            hideProjectContextMenu();
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadDashboardMemberCount();
+        updateGodModeBanner();
+        bindProjectContextMenu();
+    });
+</script>
+{% endblock %}

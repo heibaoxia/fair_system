@@ -1,0 +1,593 @@
+/* Import Google Fonts (Inter for the clean SaaS typography) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
+:root {
+  /* SaleSmartly Light SaaS Theme Colors */
+  --bg-main: #F4F6F9;
+  /* A very soft light gray-blue for the main app background */
+  --bg-surface: #FFFFFF;
+  /* Pure white for cards, sidebars, headers */
+  --bg-surface-hover: #F8FAFC;
+  /* Subtle hover state for interactive elements */
+
+  /* Brand Accents */
+  --primary-color: #3B82F6;
+  /* Vibrant Blue */
+  --primary-hover: #2563EB;
+  /* Deeper Blue */
+  --primary-light: #EFF6FF;
+  /* Very light blue for backgrounds */
+
+  --secondary-color: #0F172A;
+  /* Deep dark navy/black for high contrast buttons */
+  --secondary-hover: #1E293B;
+
+  /* State Colors */
+  --success-color: #10B981;
+  --warning-color: #F59E0B;
+  --danger-color: #EF4444;
+
+  /* Typography */
+  --text-main: #0F172A;
+  /* Very dark navy, softer than pure black */
+  --text-muted: #64748B;
+  /* Slate gray for secondary text */
+  --text-inverse: #FFFFFF;
+  /* White text for primary dark buttons */
+
+  /* Borders */
+  --border-light: #E2E8F0;
+  --border-focus: rgba(59, 130, 246, 0.4);
+
+  /* Spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2.5rem;
+
+  /* Geometry Details */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-pill: 9999px;
+  /* For pill-shaped buttons */
+
+  /* Soft Shadows (A key of modern SaaS design) */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 15px 35px -5px rgba(0, 15, 40, 0.06), 0 10px 10px -5px rgba(0, 15, 40, 0.02);
+  --shadow-float: 0 20px 40px rgba(0, 0, 0, 0.08);
+  /* Like the chat widget */
+
+  /* Animation Timings */
+  --trans-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Base resets & Body */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-main);
+  /* A very soft set of background colored blobs to give depth to the white space */
+  background-image:
+    radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.04) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.04) 0%, transparent 40%);
+  color: var(--text-main);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--text-main);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  /* Trendy tight tracking */
+}
+
+/* Layout */
+.app-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* --- Sidebar --- */
+.sidebar {
+  width: 260px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-lg) var(--space-md);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 100;
+  /* Very subtle shadow pointing right */
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.015);
+}
+
+.sidebar-logo {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.03em;
+  margin-bottom: var(--space-xl);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-sm);
+}
+
+/* Simulated Gradient text like SaleSmartly */
+.sidebar-logo span,
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Tighter gap */
+}
+
+.sidebar-link {
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all var(--trans-fast);
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-link:hover {
+  color: var(--text-main);
+  background: var(--bg-surface-hover);
+}
+
+.sidebar-link.active {
+  color: var(--primary-color);
+  background: var(--primary-light);
+  font-weight: 600;
+}
+
+/* --- Header --- */
+.page-header {
+  padding: var(--space-lg) var(--space-xl);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+
+.page-title {
+  font-size: 1.75rem;
+  margin: 0;
+  font-weight: 800;
+}
+
+.content-area {
+  padding: var(--space-xl);
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* --- Data Cards --- */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--trans-fast), box-shadow var(--trans-fast);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* --- Button Series --- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  /* Pill shaped like SaleSmartly */
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--trans-fast);
+  outline: none;
+  font-family: inherit;
+  text-decoration: none;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary {
+  color: var(--text-inverse);
+  background: var(--primary-color);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35);
+}
+
+/* Dark SaaS Button (Usually used for primary generic CTAs like Book Demo) */
+.btn-dark {
+  color: var(--text-inverse);
+  background: var(--secondary-color);
+}
+
+.btn-dark:hover:not(:disabled) {
+  background: var(--secondary-hover);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+}
+
+.btn-secondary {
+  color: var(--text-main);
+  background: var(--bg-surface);
+  border-color: var(--border-light);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  border-color: #CBD5E1;
+}
+
+.btn-danger {
+  color: var(--text-inverse);
+  background: var(--danger-color);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #DC2626;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25);
+}
+
+/* --- Forms & Inputs --- */
+.form-group {
+  margin-bottom: var(--space-md);
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.input-field {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  /* Slightly less round than buttons */
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.95rem;
+  transition: all var(--trans-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+.input-field::placeholder {
+  color: #94A3B8;
+}
+
+.input-field:hover {
+  border-color: #CBD5E1;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--border-focus);
+}
+
+/* --- Data Table --- */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+th,
+td {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-light);
+}
+
+th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+  background: #F8FAFC;
+}
+
+td {
+  font-size: 0.95rem;
+  color: var(--text-main);
+  background: var(--bg-surface);
+  transition: background var(--trans-fast);
+}
+
+tr:hover td {
+  background: var(--primary-light);
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+/* --- Badges --- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+}
+
+.badge-primary {
+  background: var(--primary-light);
+  color: var(--primary-color);
+}
+
+.badge-secondary {
+  background: #F1F5F9;
+  color: var(--text-muted);
+}
+
+.badge-success {
+  background: #ECFDF5;
+  color: var(--success-color);
+}
+
+.badge-warning {
+  background: #FFFBEB;
+  color: var(--warning-color);
+}
+
+.badge-danger {
+  background: #FEF2F2;
+  color: var(--danger-color);
+}
+
+/* --- Modals --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  /* Soft dark blue gray transparent */
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--trans-fast), visibility var(--trans-fast);
+}
+
+.modal-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal-content {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 520px;
+  padding: var(--space-xl);
+  box-shadow: var(--shadow-float);
+  transform: translateY(20px) scale(0.98);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.27);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-overlay.active .modal-content {
+  transform: translateY(0) scale(1);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-lg);
+}
+
+.modal-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+.modal-close {
+  background: #F1F5F9;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all var(--trans-fast);
+}
+
+.modal-close:hover {
+  background: #E2E8F0;
+  color: var(--text-main);
+}
+
+/* --- Toasts --- */
+.toast-container {
+  position: fixed;
+  bottom: var(--space-xl);
+  right: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  z-index: 1100;
+}
+
+.toast {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-float);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 500;
+  transform: translateX(120%);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Left Accent line for Toasts */
+.toast::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.toast.show {
+  transform: translateX(0);
+}
+
+.toast.success::before {
+  background: var(--success-color);
+}
+
+.toast.error::before {
+  background: var(--danger-color);
+}
+
+.toast.warning::before {
+  background: var(--warning-color);
+}
+
+/* --- Responsive Breakpoint --- */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 1px solid var(--border-light);
+    padding: var(--space-md);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+    z-index: 90;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .sidebar-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sidebar-link {
+    white-space: nowrap;
+  }
+
+  .content-area {
+    padding: var(--space-md);
+  }
+
+  .modal-content {
+    margin: var(--space-md);
+    padding: var(--space-lg);
+  }
+
+  .toast-container {
+    bottom: var(--space-md);
+    right: var(--space-md);
+    left: var(--space-md);
+  }
+
+  .toast {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
