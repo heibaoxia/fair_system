@@ -49,8 +49,8 @@ python seed_demo_data.py
 启动 FastAPI 内置的 Uvicorn 服务器：
 
 ```bash
-uvicorn app.main:app --reload
-```
+
+`uvicorn app.main:app --reload``
 
 随后打开浏览器访问：[http://127.0.0.1:8000](http://127.0.0.1:8000) 即可看到精美的仪表盘！
 

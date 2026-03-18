@@ -55,21 +55,43 @@ class Member(MemberBase, ConfiguredModel):
 # 2. 模块评估 (ModuleAssessment)
 # 在任务分配前，大家进行的盲打分。
 # ==========================================
+class ScoringDimensionCreate(BaseModel):
+    name: str
+    weight: float = Field(..., ge=0, le=1)
+
+
+class ScoringDimension(ScoringDimensionCreate, ConfiguredModel):
+    id: int
+    sort_order: int
+    max_score: float = 10.0
+
+
+class DimensionScoreCreate(BaseModel):
+    dimension_id: int
+    score: float = Field(..., ge=0, le=10)
+
+
+class DimensionScore(DimensionScoreCreate, ConfiguredModel):
+    id: int
+
+
 class AssessmentBase(BaseModel):
-    difficulty_score: int = Field(..., ge=1, le=5) # 难度(1-5 分制)
-    estimated_hours: float = Field(..., ge=0) # 预计时长
-    boredom_score: int = Field(..., ge=1, le=5) # 枯燥程度(1-5 分制)
-    intensity_score: int = Field(..., ge=1, le=5) # 工作强度(1-5 分制)
+    difficulty_score: Optional[float] = Field(default=None, ge=0, le=10)
+    estimated_hours: Optional[float] = Field(default=None, ge=0)
+    boredom_score: Optional[float] = Field(default=None, ge=0, le=10)
+    intensity_score: Optional[float] = Field(default=None, ge=0, le=10)
 
 class AssessmentCreate(AssessmentBase):
     member_id: int # 谁提交的评估
     module_id: int # 在给别人打分时，必须要告诉系统这是对哪个模块打的分
+    dimension_scores: Optional[List[DimensionScoreCreate]] = []
 
 class ModuleAssessment(AssessmentBase, ConfiguredModel):
     id: int
     member_id: int
     module_id: int
     created_at: datetime
+    dimension_scores: List[DimensionScore] = []
 
 
 # ==========================================
@@ -161,6 +183,7 @@ class ProjectCreate(ProjectBase):
     # 接收前端传来的模块依赖关系，比如：[{"preceding": 0, "dependent": 1}]
     # 这里的 0, 1 是 new_modules 列表里的索引号。
     dependencies: List[dict] = []
+    scoring_dimensions: Optional[List[ScoringDimensionCreate]] = []
 
 class AssessmentPeriodSet(BaseModel):
     start_mode: str
@@ -186,7 +209,9 @@ class Project(ProjectBase, ConfiguredModel):
     weight_hours: float = 0.25
     weight_boredom: float = 0.25
     weight_intensity: float = 0.25
+    use_custom_dimensions: bool = False
     created_at: datetime
     
     # 获取这个项目所有的模块
     modules: List[Module] = []
+    scoring_dimensions: List[ScoringDimension] = []

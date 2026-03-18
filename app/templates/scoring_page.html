@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+
+{% block title %}独立打分页{% endblock %}
+
+{% block extra_css %}
+<style>
+    .scoring-shell {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 24px;
+    }
+
+    .scoring-layout {
+        display: grid;
+        grid-template-columns: minmax(260px, 30%) minmax(0, 1fr);
+        gap: 24px;
+    }
+
+    .scoring-panel {
+        background: #ffffff;
+        border: 1px solid #dbe4f0;
+        border-radius: 18px;
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+    }
+
+    .scoring-sidebar {
+        padding: 18px;
+    }
+
+    .scoring-sidebar h2,
+    .scoring-main h1,
+    .scoring-main h2,
+    .scoring-main h3 {
+        margin: 0;
+    }
+
+    .scoring-sidebar p,
+    .scoring-main p {
+        color: #5b6b7f;
+    }
+
+    .module-list {
+        margin-top: 18px;
+        display: grid;
+        gap: 12px;
+    }
+
+    .module-item {
+        width: 100%;
+        text-align: left;
+        border: 1px solid #d7dee8;
+        border-radius: 14px;
+        background: linear-gradient(180deg, #fbfcfe 0%, #f2f6fb 100%);
+        padding: 14px 16px;
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .module-item:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    .module-item.is-active {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+        background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+    }
+
+    .module-item-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        font-weight: 700;
+        color: #142132;
+    }
+
+    .module-item-status {
+        font-size: 13px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        color: #334155;
+        flex-shrink: 0;
+    }
+
+    .module-item.is-done .module-item-status {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .scoring-main {
+        padding: 24px;
+        min-height: 620px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+    }
+
+    .scoring-main-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+
+    .scoring-project-meta {
+        display: grid;
+        gap: 8px;
+    }
+
+    .scoring-project-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #e0f2fe;
+        color: #075985;
+        font-size: 13px;
+        font-weight: 700;
+        width: fit-content;
+    }
+
+    .score-card {
+        border: 1px solid #dbe4f0;
+        border-radius: 16px;
+        padding: 20px;
+        background: #f9fbfd;
+    }
+
+    .dimension-list {
+        display: grid;
+        gap: 18px;
+        margin-top: 20px;
+    }
+
+    .dimension-row {
+        padding: 16px;
+        border-radius: 14px;
+        border: 1px solid #dde5ef;
+        background: #ffffff;
+    }
+
+    .dimension-row-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+
+    .dimension-row-head strong {
+        color: #0f172a;
+        font-size: 16px;
+    }
+
+    .dimension-row-head span {
+        color: #64748b;
+        font-size: 13px;
+    }
+
+    .dimension-inputs {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 92px;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .dimension-inputs input[type="range"] {
+        width: 100%;
+    }
+
+    .dimension-inputs input[type="number"] {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #cbd5e1;
+    }
+
+    .score-review-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 18px;
+    }
+
+    .score-review-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #ffffff;
+        border: 1px solid #dbe4f0;
+    }
+
+    .empty-state,
+    .complete-state {
+        display: grid;
+        place-items: center;
+        min-height: 320px;
+        text-align: center;
+        color: #475569;
+        border: 1px dashed #cbd5e1;
+        border-radius: 18px;
+        background: linear-gradient(180deg, #f8fafc 0%, #eef4fb 100%);
+        padding: 24px;
+    }
+
+    .complete-state strong {
+        font-size: 24px;
+        color: #166534;
+    }
+
+    .hidden {
+        display: none !important;
+    }
+
+    @media (max-width: 980px) {
+        .scoring-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .dimension-inputs {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="scoring-shell">
+    <div class="scoring-layout">
+        <aside class="scoring-panel scoring-sidebar">
+            <h2>模块列表</h2>
+            <p>点击左侧模块开始评分；已提交模块会显示你的个人评分回顾。</p>
+            <div id="module-list" class="module-list"></div>
+        </aside>
+
+        <section class="scoring-panel scoring-main">
+            <div class="scoring-main-header">
+                <div class="scoring-project-meta">
+                    <span class="scoring-project-tag">项目评分 · {{ project.name }}</span>
+                    <h1>{{ project.name }}</h1>
+                    <p>当前评分人：{{ member.name }}</p>
+                </div>
+                <a class="btn btn-secondary" href="/todo?member_id={{ member_id }}">返回待办</a>
+            </div>
+
+            <div id="all-done-panel" class="complete-state hidden">
+                <div>
+                    <strong>已完成所有打分</strong>
+                    <p>这个项目下的模块评分已经全部提交完成。</p>
+                </div>
+            </div>
+
+            <div id="empty-selection-panel" class="empty-state hidden">
+                <div>
+                    <strong>请选择一个模块</strong>
+                    <p>左侧列表会显示项目中的所有模块和你的打分状态。</p>
+                </div>
+            </div>
+
+            <div id="module-detail-panel" class="score-card hidden">
+                <div style="display:grid; gap:8px;">
+                    <h2 id="detail-module-name"></h2>
+                    <p id="detail-module-description"></p>
+                </div>
+
+                <div id="submitted-state" class="hidden" style="margin-top: 20px;">
+                    <div class="scoring-project-tag" style="background:#dcfce7; color:#166534;">已提交</div>
+                    <div id="review-score-list" class="score-review-list"></div>
+                </div>
+
+                <form id="scoring-form" class="hidden" style="margin-top: 10px;">
+                    <div id="dimension-list" class="dimension-list"></div>
+                    <div style="margin-top: 20px; display:flex; justify-content:flex-end; gap:12px;">
+                        <button type="submit" class="btn btn-primary">提交评分</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const scoringProjectId = {{ project.id }};
+    const scoringMemberId = {{ member_id }};
+    const scoringDimensions = {{ scoring_dimensions | tojson }};
+    const scoringModules = {{ modules | tojson }};
+
+    let selectedModuleId = null;
+
+    function scoreStatusText(module) {
+        return module.is_scored ? '✅ 已打分' : '⏳ 未打分';
+    }
+
+    function renderModuleList() {
+        const container = document.getElementById('module-list');
+        container.innerHTML = '';
+
+        scoringModules.forEach((module) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = `module-item${module.is_scored ? ' is-done' : ''}${selectedModuleId === module.id ? ' is-active' : ''}`;
+            button.innerHTML = `
+                <div class="module-item-head">
+                    <span>${module.name}</span>
+                    <span class="module-item-status">${scoreStatusText(module)}</span>
+                </div>
+            `;
+            button.addEventListener('click', () => {
+                selectedModuleId = module.id;
+                renderModuleList();
+                renderSelectedModule();
+            });
+            container.appendChild(button);
+        });
+    }
+
+    function renderReview(module) {
+        const reviewList = document.getElementById('review-score-list');
+        reviewList.innerHTML = '';
+
+        (module.assessment?.review_scores || []).forEach((item) => {
+            const row = document.createElement('div');
+            row.className = 'score-review-item';
+            row.innerHTML = `<strong>${item.name}</strong><span>${Number(item.score).toFixed(1)} / 10</span>`;
+            reviewList.appendChild(row);
+        });
+    }
+
+    function createDimensionInput(dimension, module) {
+        const row = document.createElement('div');
+        row.className = 'dimension-row';
+
+        const fieldKey = dimension.legacy_field || `dimension-${dimension.id}`;
+        const defaultValue = module.assessment?.review_scores?.find((item) => item.name === dimension.name)?.score ?? 5;
+
+        row.innerHTML = `
+            <div class="dimension-row-head">
+                <strong>${dimension.name}</strong>
+                <span>权重 ${(Number(dimension.weight || 0) * 100).toFixed(0)}%</span>
+            </div>
+            <div class="dimension-inputs">
+                <input type="range" min="0" max="10" step="0.1" value="${Number(defaultValue).toFixed(1)}" data-role="range" data-field-key="${fieldKey}">
+                <input type="number" min="0" max="10" step="0.1" value="${Number(defaultValue).toFixed(1)}" data-role="number" data-field-key="${fieldKey}">
+            </div>
+        `;
+
+        const rangeInput = row.querySelector('input[data-role="range"]');
+        const numberInput = row.querySelector('input[data-role="number"]');
+
+        rangeInput.addEventListener('input', () => {
+            numberInput.value = Number(rangeInput.value).toFixed(1);
+        });
+        numberInput.addEventListener('input', () => {
+            const value = Math.max(0, Math.min(10, Number(numberInput.value || 0)));
+            if (!Number.isNaN(value)) {
+                rangeInput.value = value.toFixed(1);
+            }
+        });
+
+        return row;
+    }
+
+    function renderForm(module) {
+        const dimensionList = document.getElementById('dimension-list');
+        dimensionList.innerHTML = '';
+        scoringDimensions.forEach((dimension) => {
+            dimensionList.appendChild(createDimensionInput(dimension, module));
+        });
+    }
+
+    function updatePanelsVisibility(hasSelection, allDone, isSubmitted) {
+        document.getElementById('all-done-panel').classList.toggle('hidden', !allDone);
+        document.getElementById('empty-selection-panel').classList.toggle('hidden', hasSelection || allDone);
+        document.getElementById('module-detail-panel').classList.toggle('hidden', !hasSelection || allDone);
+        document.getElementById('submitted-state').classList.toggle('hidden', !isSubmitted);
+        document.getElementById('scoring-form').classList.toggle('hidden', isSubmitted || !hasSelection || allDone);
+    }
+
+    function renderSelectedModule() {
+        const allDone = scoringModules.length > 0 && scoringModules.every((module) => module.is_scored);
+        const module = scoringModules.find((item) => item.id === selectedModuleId) || null;
+
+        if (!module && !allDone) {
+            updatePanelsVisibility(false, false, false);
+            return;
+        }
+
+        if (allDone && !module) {
+            updatePanelsVisibility(false, true, false);
+            return;
+        }
+
+        document.getElementById('detail-module-name').textContent = module.name;
+        document.getElementById('detail-module-description').textContent = module.description || '这个模块暂时没有补充说明。';
+        updatePanelsVisibility(true, false, module.is_scored);
+
+        if (module.is_scored) {
+            renderReview(module);
+            return;
+        }
+
+        renderForm(module);
+    }
+
+    function buildAssessmentPayload(moduleId) {
+        const payload = {
+            member_id: scoringMemberId,
+            module_id: moduleId,
+            dimension_scores: []
+        };
+
+        const form = document.getElementById('scoring-form');
+        scoringDimensions.forEach((dimension) => {
+            const fieldKey = dimension.legacy_field || `dimension-${dimension.id}`;
+            const input = form.querySelector(`input[data-role="number"][data-field-key="${fieldKey}"]`);
+            const score = Number(input.value);
+            if (Number.isNaN(score) || score < 0 || score > 10) {
+                throw new Error(`${dimension.name} 的分数必须在 0 到 10 之间`);
+            }
+
+            if (dimension.id !== null && dimension.id !== undefined) {
+                payload.dimension_scores.push({ dimension_id: dimension.id, score });
+            } else if (dimension.legacy_field) {
+                payload[dimension.legacy_field] = score;
+            }
+        });
+
+        return payload;
+    }
+
+    function moveToNextPendingModule() {
+        const nextModule = scoringModules.find((module) => !module.is_scored);
+        selectedModuleId = nextModule ? nextModule.id : null;
+        renderModuleList();
+        renderSelectedModule();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const currentMemberId = getCurrentMemberId();
+        const url = new URL(window.location.href);
+        const memberId = url.searchParams.get('member_id');
+
+        if (currentMemberId && memberId !== String(currentMemberId)) {
+            url.searchParams.set('member_id', currentMemberId);
+            window.location.replace(url.toString());
+            return;
+        }
+
+        const firstPending = scoringModules.find((module) => !module.is_scored);
+        selectedModuleId = firstPending ? firstPending.id : (scoringModules[0]?.id || null);
+
+        renderModuleList();
+        renderSelectedModule();
+
+        document.getElementById('scoring-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const module = scoringModules.find((item) => item.id === selectedModuleId);
+            if (!module) {
+                return;
+            }
+
+            try {
+                const payload = buildAssessmentPayload(module.id);
+                const response = await fetch('/assessments/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(getApiErrorMessage(data, '提交评分失败'));
+                }
+
+                module.is_scored = true;
+                module.assessment = {
+                    assessment_id: data.id,
+                    review_scores: scoringDimensions.map((dimension) => {
+                        if (dimension.id !== null && dimension.id !== undefined) {
+                            const matched = (payload.dimension_scores || []).find((item) => item.dimension_id === dimension.id);
+                            return { name: dimension.name, score: matched ? matched.score : 0, weight: dimension.weight };
+                        }
+                        return { name: dimension.name, score: payload[dimension.legacy_field] || 0, weight: dimension.weight };
+                    })
+                };
+
+                showToast('评分已提交');
+                moveToNextPendingModule();
+            } catch (error) {
+                showToast(error.message || '提交评分失败', true);
+            }
+        });
+    });
+</script>
+{% endblock %}

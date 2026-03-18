@@ -71,6 +71,7 @@ class Project(Base):
     weight_hours = Column(Float, default=0.25)        # 预估时长权重
     weight_boredom = Column(Float, default=0.25)      # 枯燥度权重
     weight_intensity = Column(Float, default=0.25)    # 强度权重
+    use_custom_dimensions = Column(Boolean, default=False)
 
     # 这是一个外键 (ForeignKey)，意味着这一列存着另一个表的 ID。
     # 比如这里填了 1，说明是 members 表里 ID 为 1 的用户创建了这个项目。
@@ -82,6 +83,7 @@ class Project(Base):
     modules = relationship("Module", back_populates="project")
     # 项目包含哪些参与成员
     members = relationship("Member", secondary=project_members_association, backref="joined_projects")
+    scoring_dimensions = relationship("ScoringDimension", back_populates="project", cascade="all, delete-orphan", order_by="ScoringDimension.sort_order")
 
 
 # ==========================================
@@ -192,24 +194,20 @@ class ModuleAssessment(Base):
     # 打的哪个模块？
     module_id = Column(Integer, ForeignKey("modules.id"))
 
-    # 打分细节：
-    # 1. 难度分：这个活儿对你来说难度多少？(1分非常简单 - 5分地狱难度)
-    difficulty_score = Column(Integer, default=3) 
-    
-    # 2. 预计时间：只有这个是填浮点数时长，你估计你自己做要几小时？
-    estimated_hours = Column(Float, default=0.0) 
-
-    # 3. 枯燥程度：这个活儿有多无聊？(1分很有趣 - 5分枯燥乏味)
-    boredom_score = Column(Integer, default=3)
-    
-    # 4. 工作强度：这个活儿做起来累不累？(1分轻松 - 5分高强度)
-    intensity_score = Column(Integer, default=3)
+    # 旧版四维打分（保留向后兼容，新项目使用 DimensionScore）
+    # 字段类型从 Integer 改为 Float 以支持小数打分（0~10）
+    difficulty_score = Column(Float, default=0.0)
+    estimated_hours = Column(Float, default=0.0)
+    boredom_score = Column(Float, default=0.0)
+    intensity_score = Column(Float, default=0.0)
 
     created_at = Column(DateTime, default=datetime.now)
 
     # ---------------- 魔法关联区 ----------------
     member = relationship("Member", back_populates="assessments")
     module = relationship("Module", back_populates="assessments")
+    # 自定义维度评分明细
+    dimension_scores = relationship("DimensionScore", back_populates="assessment", cascade="all, delete-orphan")
 
 
 class ModuleSwapRequest(Base):
@@ -232,3 +230,36 @@ class ModuleSwapRequest(Base):
 
     created_at = Column(DateTime, default=datetime.now)
     resolved_at = Column(DateTime, nullable=True)
+
+
+# ==========================================
+# 8. [全新] 打分维度定义表 (ScoringDimension)
+# PM在创建项目时可自定义打分维度及权重
+# ==========================================
+class ScoringDimension(Base):
+    __tablename__ = "scoring_dimensions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"))
+    name = Column(String)              # 维度名称，如 "难度"、"创意度"
+    weight = Column(Float, default=0.25)  # 该维度权重
+    max_score = Column(Float, default=10.0) # 满分（固定10）
+    sort_order = Column(Integer, default=0) # 显示排序
+
+    project = relationship("Project", back_populates="scoring_dimensions")
+
+
+# ==========================================
+# 9. [全新] 维度评分明细表 (DimensionScore)
+# 每次评估中，每个维度的具体分数
+# ==========================================
+class DimensionScore(Base):
+    __tablename__ = "dimension_scores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    assessment_id = Column(Integer, ForeignKey("module_assessments.id"))
+    dimension_id = Column(Integer, ForeignKey("scoring_dimensions.id"))
+    score = Column(Float, default=0.0)  # 0~10 浮点
+
+    assessment = relationship("ModuleAssessment", back_populates="dimension_scores")
+    dimension = relationship("ScoringDimension")

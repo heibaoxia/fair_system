@@ -12,6 +12,10 @@ from app.api.dependencies import get_db
 
 router = APIRouter(prefix="/assessments", tags=["模块评估"])
 
+
+def _normalize_legacy_score(value: float | None) -> float:
+    return float(value) if value is not None else 0.0
+
 @router.post("/", response_model=schemas.ModuleAssessment)
 def create_assessment(assessment: schemas.AssessmentCreate, db: Session = Depends(get_db)):
     """
@@ -61,18 +65,39 @@ def create_assessment(assessment: schemas.AssessmentCreate, db: Session = Depend
     
     if existing:
         raise HTTPException(status_code=400, detail="你已经评估过这个模块啦，不能重复刷票！")
-        
+
+    project_dimension_ids = {
+        dimension.id
+        for dimension in db.query(models.ScoringDimension).filter(
+            models.ScoringDimension.project_id == project.id
+        ).all()
+    }
+    provided_dimension_ids = [item.dimension_id for item in (assessment.dimension_scores or [])]
+    if any(dimension_id not in project_dimension_ids for dimension_id in provided_dimension_ids):
+        raise HTTPException(status_code=400, detail="存在不属于当前项目的评分维度")
+    if len(set(provided_dimension_ids)) != len(provided_dimension_ids):
+        raise HTTPException(status_code=400, detail="评分维度不能重复提交")
+         
     # 如果一切正常，创建评估数据
     new_assessment = models.ModuleAssessment(
         member_id=assessment.member_id,               # 谁打的分？前端传
         module_id=assessment.module_id,               # 哪个模块？前端传
-        difficulty_score=assessment.difficulty_score, # 后面是四个分数
-        estimated_hours=assessment.estimated_hours,
-        boredom_score=assessment.boredom_score,
-        intensity_score=assessment.intensity_score
+        difficulty_score=_normalize_legacy_score(assessment.difficulty_score),
+        estimated_hours=_normalize_legacy_score(assessment.estimated_hours),
+        boredom_score=_normalize_legacy_score(assessment.boredom_score),
+        intensity_score=_normalize_legacy_score(assessment.intensity_score)
     )
     
     db.add(new_assessment)
+    db.flush()
+
+    for item in assessment.dimension_scores or []:
+        db.add(models.DimensionScore(
+            assessment_id=new_assessment.id,
+            dimension_id=item.dimension_id,
+            score=float(item.score),
+        ))
+
     db.commit()
     db.refresh(new_assessment)
     

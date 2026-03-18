@@ -52,6 +52,10 @@ with engine.begin() as connection:
     if "total_earnings" not in member_columns:
         connection.execute(text("ALTER TABLE members ADD COLUMN total_earnings FLOAT DEFAULT 0.0"))
 
+    project_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(projects)"))}
+    if "use_custom_dimensions" not in project_columns:
+        connection.execute(text("ALTER TABLE projects ADD COLUMN use_custom_dimensions BOOLEAN DEFAULT 0"))
+
 
 # 3. 将各个业务模块的路由“挂载”到主程序上！
 # 相当于把这些写好的办公室告诉总前台门卫

@@ -202,47 +202,32 @@
     <div class="todo-grid">
         <div class="todo-column">
             <div class="todo-card assessment-card">
-                <h3 style="color: #ef4444; margin-top:0;">🎯 需要我打分评估的模块</h3>
-                <p style="font-size: 14px;">项目经理开放评分期后，待评分模块会在这里实时出现；临近截止会自动标红提醒。</p>
+                <h3 style="color: #ef4444; margin-top:0;">🎯 需要我打分评估的项目</h3>
+                <p style="font-size: 14px;">项目经理开放评分期后，待评分项目会在这里出现；点击进入独立打分页，集中完成该项目下全部模块评分。</p>
 
                 <div class="todo-summary">
-                    <span>待打分 {{ pending_data.total_pending or 0 }} 项</span>
+                    <span>待打分 {{ pending_data.total_pending or 0 }} 个模块</span>
                     <span class="is-muted">已超期 {{ pending_data.total_expired or 0 }} 项</span>
                 </div>
 
                 <div class="assessment-list">
-                    {% if pending_data.pending %}
-                        {% for item in pending_data.pending %}
+                    {% if grouped_pending %}
+                        {% for item in grouped_pending %}
                         <article class="assessment-item{% if item.is_urgent %} is-urgent{% endif %}{% if item.is_expired %} is-expired{% endif %}">
                             <div class="assessment-item-header">
                                 <div>
-                                    <div class="assessment-item-title">[{{ item.project_name }}] {{ item.module_name }}</div>
-                                    {% if item.module_description %}
-                                    <div style="margin-top: 6px; font-size: 14px; color: #64748b;">{{ item.module_description }}</div>
-                                    {% endif %}
+                                    <div class="assessment-item-title">{{ item.project_name }}</div>
+                                    <div style="margin-top: 6px; font-size: 14px; color: #64748b;">待打分模块 {{ item.module_count }} 个</div>
                                 </div>
-                                {% if item.is_expired %}
-                                <span class="todo-badge expired">已超期</span>
-                                {% elif item.is_urgent %}
-                                <span class="todo-badge urgent">24h 内截止</span>
-                                {% endif %}
+                                <span class="todo-badge expired" style="background:#fee2e2; color:#b91c1c;">待评分项目</span>
                             </div>
 
                             <div class="assessment-item-meta">
-                                <span>截止时间：{{ item.assessment_end.replace('T', ' ')[:16] }}</span>
-                                {% if item.is_expired %}
-                                <span>状态：已超期，无法打分</span>
-                                {% else %}
-                                <span>倒计时：剩余 {{ '%.1f'|format(item.remaining_hours) }} 小时</span>
-                                {% endif %}
+                                <span>最早截止时间：{{ item.earliest_deadline.replace('T', ' ')[:16] if item.earliest_deadline else '未设置' }}</span>
                             </div>
 
                             <div class="assessment-item-actions">
-                                {% if item.is_expired %}
-                                <span style="font-size: 13px; color: #64748b;">已超期，无法打分</span>
-                                {% else %}
-                                <a class="btn btn-primary" href="/project/{{ item.project_id }}?module_id={{ item.module_id }}">立即打分</a>
-                                {% endif %}
+                                <a class="btn btn-primary" href="/scoring/{{ item.project_id }}?member_id={{ member_id }}">立即打分</a>
                             </div>
                         </article>
                         {% endfor %}

@@ -6,6 +6,8 @@ Fair-System 前端网页路由
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from datetime import datetime
+from typing import Any
 
 from app.api.dependencies import get_db
 from app import models
@@ -18,6 +20,98 @@ from app.api.swaps import get_pending_swap_requests
 router = APIRouter(tags=["前端页面"])
 
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _as_float(value: Any, default: float) -> float:
+    try:
+        return float(value if value is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_int(value: Any, default: int) -> int:
+    try:
+        return int(value if value is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _build_scoring_dimensions_payload(project: Project, db: Session):
+    dimensions = db.query(models.ScoringDimension).filter(
+        models.ScoringDimension.project_id == project.id
+    ).order_by(models.ScoringDimension.sort_order.asc(), models.ScoringDimension.id.asc()).all()
+
+    if dimensions:
+        return [
+            {
+                "id": dimension.id,
+                "name": dimension.name,
+                "weight": _as_float(dimension.weight, 0.0),
+                "sort_order": _as_int(dimension.sort_order, 0),
+                "max_score": _as_float(dimension.max_score, 10.0),
+            }
+            for dimension in dimensions
+        ]
+
+    return [
+        {"id": None, "name": "难度", "weight": _as_float(getattr(project, "weight_difficulty", 0.25), 0.25), "sort_order": 0, "max_score": 10.0, "legacy_field": "difficulty_score"},
+        {"id": None, "name": "时长", "weight": _as_float(getattr(project, "weight_hours", 0.25), 0.25), "sort_order": 1, "max_score": 10.0, "legacy_field": "estimated_hours"},
+        {"id": None, "name": "枯燥度", "weight": _as_float(getattr(project, "weight_boredom", 0.25), 0.25), "sort_order": 2, "max_score": 10.0, "legacy_field": "boredom_score"},
+        {"id": None, "name": "强度", "weight": _as_float(getattr(project, "weight_intensity", 0.25), 0.25), "sort_order": 3, "max_score": 10.0, "legacy_field": "intensity_score"},
+    ]
+
+
+def _build_member_assessment_lookup(project: Project, member_id: int, db: Session):
+    modules = db.query(Module).filter(Module.project_id == project.id).order_by(Module.id.asc()).all()
+    dimensions = _build_scoring_dimensions_payload(project, db)
+    module_ids = [module.id for module in modules]
+    assessments = []
+    if module_ids:
+        assessments = db.query(models.ModuleAssessment).filter(
+            models.ModuleAssessment.member_id == member_id,
+            models.ModuleAssessment.module_id.in_(module_ids),
+        ).all()
+
+    assessment_map = {}
+    for assessment in assessments:
+        dimension_score_map = {
+            score.dimension_id: round(float(score.score or 0.0), 1)
+            for score in getattr(assessment, "dimension_scores", []) or []
+        }
+        review_scores = []
+        for dimension in dimensions:
+            legacy_field = dimension.get("legacy_field")
+            if dimension.get("id") is not None:
+                score_value = dimension_score_map.get(dimension["id"], 0.0)
+            elif isinstance(legacy_field, str):
+                legacy_raw_value = getattr(assessment, legacy_field, 0.0)
+                score_value = round(float(legacy_raw_value or 0.0), 1)
+            else:
+                score_value = 0.0
+            review_scores.append({
+                "name": dimension["name"],
+                "score": score_value,
+                "weight": dimension["weight"],
+            })
+
+        assessment_map[assessment.module_id] = {
+            "assessment_id": assessment.id,
+            "review_scores": review_scores,
+        }
+
+    module_payload = []
+    for module in modules:
+        current_assessment = assessment_map.get(module.id)
+        module_payload.append({
+            "id": module.id,
+            "name": module.name,
+            "description": module.description or "",
+            "status": getattr(module, "status", ""),
+            "is_scored": current_assessment is not None,
+            "assessment": current_assessment,
+        })
+
+    return dimensions, module_payload
 
 
 @router.get("/")
@@ -92,6 +186,7 @@ def show_todo_page(request: Request, member_id: int = 0, db: Session = Depends(g
     pending_data = {"pending": [], "total_pending": 0, "total_expired": 0}
     pending_swaps = []
     active_work_modules = []
+    grouped_pending = []
     wallet_summary = {
         "settled_amount": 0.0,
         "pending_estimated_amount": 0.0,
@@ -100,6 +195,44 @@ def show_todo_page(request: Request, member_id: int = 0, db: Session = Depends(g
     if member_id > 0:
         pending_data = get_pending_assessments(member_id, db)
         pending_swaps = get_pending_swap_requests(member_id, db)
+
+        grouped_pending_map = {}
+        for item in pending_data.get("pending", []):
+            project_id = item.get("project_id")
+            if project_id is None or item.get("is_expired"):
+                continue
+
+            current_group = grouped_pending_map.get(project_id)
+            deadline_text = item.get("assessment_end")
+            deadline_value = None
+            if isinstance(deadline_text, str):
+                try:
+                    deadline_value = datetime.fromisoformat(deadline_text)
+                except ValueError:
+                    deadline_value = None
+
+            if current_group is None:
+                grouped_pending_map[project_id] = {
+                    "project_id": project_id,
+                    "project_name": item.get("project_name", f"项目 #{project_id}"),
+                    "module_count": 1,
+                    "earliest_deadline": deadline_text,
+                    "_deadline_value": deadline_value,
+                }
+                continue
+
+            current_group["module_count"] += 1
+            current_deadline = current_group.get("_deadline_value")
+            if deadline_value is not None and (current_deadline is None or deadline_value < current_deadline):
+                current_group["earliest_deadline"] = deadline_text
+                current_group["_deadline_value"] = deadline_value
+
+        grouped_pending = sorted(
+            grouped_pending_map.values(),
+            key=lambda item: (item.get("_deadline_value") is None, item.get("_deadline_value") or datetime.max, item["project_name"])
+        )
+        for item in grouped_pending:
+            item.pop("_deadline_value", None)
 
         member = db.query(Member).filter(Member.id == member_id).first()
         if member is not None:
@@ -138,6 +271,7 @@ def show_todo_page(request: Request, member_id: int = 0, db: Session = Depends(g
         "request": request,
         "member_id": member_id,
         "pending_data": pending_data,
+        "grouped_pending": grouped_pending,
         "pending_swaps": pending_swaps,
         "active_work_modules": active_work_modules,
         "wallet_summary": wallet_summary,
@@ -202,4 +336,29 @@ def show_timeline(request: Request, project_id: int, db: Session = Depends(get_d
         "completed_hours": completed_hours,
         "total_hours": total_hours,
         "timeline_data": timeline_data
+    })
+
+
+@router.get("/scoring/{project_id}")
+def show_scoring_page(request: Request, project_id: int, member_id: int, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    member = db.query(Member).filter(Member.id == member_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="成员不存在")
+
+    if member not in project.members:
+        raise HTTPException(status_code=403, detail="你不是该项目的组员，无权评分")
+
+    scoring_dimensions, modules = _build_member_assessment_lookup(project, member_id, db)
+
+    return templates.TemplateResponse("scoring_page.html", {
+        "request": request,
+        "project": project,
+        "member": member,
+        "member_id": member_id,
+        "scoring_dimensions": scoring_dimensions,
+        "modules": modules,
     })

@@ -15,12 +15,37 @@ from app.api.scoring import _calc_module_summary
 
 router = APIRouter(prefix="/projects", tags=["项目管理"])
 
+DEFAULT_SCORING_DIMENSIONS = [
+    {"name": "难度", "weight": 0.25},
+    {"name": "时长", "weight": 0.25},
+    {"name": "枯燥度", "weight": 0.25},
+    {"name": "强度", "weight": 0.25},
+]
+
 
 def _ensure_project_manager_or_god(project: models.Project, current_member_id: int, detail: str) -> None:
     if current_member_id == 0:
         return
     if getattr(project, "created_by", None) != current_member_id:
         raise HTTPException(status_code=403, detail=detail)
+
+
+def _resolve_scoring_dimensions(project_payload: schemas.ProjectCreate) -> List[dict]:
+    requested_dimensions = project_payload.scoring_dimensions or []
+    if not requested_dimensions:
+        return [dict(item) for item in DEFAULT_SCORING_DIMENSIONS]
+
+    total_weight = sum(float(item.weight) for item in requested_dimensions)
+    if abs(total_weight - 1.0) > 0.01:
+        raise HTTPException(status_code=400, detail=f"评分维度权重之和必须为 1.0，当前为 {total_weight:.4f}")
+
+    normalized_dimensions = []
+    for item in requested_dimensions:
+        name = (item.name or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="评分维度名称不能为空")
+        normalized_dimensions.append({"name": name, "weight": float(item.weight)})
+    return normalized_dimensions
 
 @router.post("/", response_model=schemas.Project)
 def create_project(project: schemas.ProjectCreate, created_by_member_id: int, db: Session = Depends(get_db)):
@@ -34,12 +59,15 @@ def create_project(project: schemas.ProjectCreate, created_by_member_id: int, db
     if not creator:
         raise HTTPException(status_code=404, detail="创建该项目的成员ID不存在！")
         
+    scoring_dimensions = _resolve_scoring_dimensions(project)
+
     # 2. 创建主项目数据
     # 这里用 dict 提取 name 和 description
     db_project = models.Project(
         name=project.name, 
         description=project.description, 
-        created_by=created_by_member_id
+        created_by=created_by_member_id,
+        use_custom_dimensions=True,
     )
     db.add(db_project)
     
@@ -48,6 +76,16 @@ def create_project(project: schemas.ProjectCreate, created_by_member_id: int, db
     
     db.commit()      # 提交！现在数据库里有了这个项目，哪怕模块还没建
     db.refresh(db_project) # 刷新！立刻拿到它生成的 project_id
+
+    for index, item in enumerate(scoring_dimensions):
+        db.add(models.ScoringDimension(
+            project_id=db_project.id,
+            name=item["name"],
+            weight=item["weight"],
+            sort_order=index,
+        ))
+    db.commit()
+    db.refresh(db_project)
     
     # 3. 如果伴随着创建项目，还提交了多个"子任务(模块)"
     # 我们用一个列表保存新建出来的模块对象，方便等下拿它们的真实 ID 连线
@@ -91,6 +129,7 @@ def create_project(project: schemas.ProjectCreate, created_by_member_id: int, db
                     pass # 如果前端传的索引越界了，那就不建这条线
             db.commit()
 
+    db.refresh(db_project)
     return db_project
 
 @router.get("/", response_model=List[schemas.Project])
@@ -366,6 +405,13 @@ def delete_project(project_id: int, current_member_id: int, db: Session = Depend
     module_ids = [module.id for module in db.query(models.Module).filter(models.Module.project_id == project_id).all()]
 
     if module_ids:
+        assessment_ids = [assessment.id for assessment in db.query(models.ModuleAssessment.id).filter(
+            models.ModuleAssessment.module_id.in_(module_ids)
+        ).all()]
+        if assessment_ids:
+            db.query(models.DimensionScore).filter(
+                models.DimensionScore.assessment_id.in_(assessment_ids)
+            ).delete(synchronize_session=False)
         db.query(models.FileDependency).filter(
             (models.FileDependency.preceding_module_id.in_(module_ids))
             | (models.FileDependency.dependent_module_id.in_(module_ids))
@@ -379,6 +425,10 @@ def delete_project(project_id: int, current_member_id: int, db: Session = Depend
         db.query(models.Module).filter(
             models.Module.id.in_(module_ids)
         ).delete(synchronize_session=False)
+
+    db.query(models.ScoringDimension).filter(
+        models.ScoringDimension.project_id == project_id
+    ).delete(synchronize_session=False)
 
     project.members.clear()
     db.delete(project)

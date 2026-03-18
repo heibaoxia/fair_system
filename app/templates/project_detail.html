@@ -147,12 +147,18 @@
     }
 
     #project-module-layer button:hover,
-    #project-module-layer button:focus-visible,
-    #project-module-layer button[data-selected="true"] {
+    #project-module-layer button:focus-visible {
         transform: translateY(-2px);
         box-shadow: 0 22px 34px rgba(15, 23, 42, 0.24);
         border-color: var(--primary-color);
         outline: none;
+    }
+
+    #project-module-layer button[data-selected="true"] {
+        border: 2px solid var(--primary-color);
+        background: rgba(59, 130, 246, 0.10);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35), 0 22px 34px rgba(15, 23, 42, 0.24);
+        transform: translateY(-2px);
     }
 
     #project-module-layer button[data-drop-target="true"] {
@@ -589,7 +595,6 @@
             <button type="button" data-manager-action="add-member" class="btn btn-secondary" onclick="openModal('add-member-modal')" style="display: none;">添加成员</button>
             <button type="button" id="assessment-period-trigger" class="btn btn-secondary" onclick="openModal('assessment-period-modal')" style="display: none;">设置评分期</button>
             <button type="button" id="batch-assignment-trigger" data-manager-action="batch-assign" class="btn btn-dark" style="display: none;" title="请先完成评分后再使用一键公平分配" onclick="handleBatchAssignmentTrigger()">⚡ 一键公平分配</button>
-            <button type="button" data-manager-action="save-dependencies" class="btn btn-dark" onclick="showToast('静态骨架阶段，保存依赖关系逻辑暂未接入。')" style="display: none;">保存依赖关系</button>
         </div>
         <div id="batch-adjust-mode-note" class="batch-adjust-note" hidden>
             <span>微调模式：拖拽模块卡片到目标成员完成调整。完成后点击“确认开工”。</span>
@@ -674,7 +679,7 @@
                                 data-module-project-id="{{ module.project_id }}"
                                 data-assigned-to="{{ module.assigned_to or '' }}"
                                 data-module-owner="{% if module.assigned_to %}{% for member in members %}{% if member.id == module.assigned_to %}{{ member.name }}{% endif %}{% endfor %}{% else %}未分配{% endif %}"
-                                onclick="selectModule(this)"
+                                onclick="selectModule(this, event)"
                                 style="left: {{ 40 + (column * 250) }}px; top: {{ 40 + (row * 150) }}px;"
                             >
                                 <strong>{{ module.name }}</strong>
@@ -738,39 +743,6 @@
                                 </div>
                             </section>
 
-                            <section id="detail-assessment-section" class="detail-section" hidden>
-                                <div>
-                                    <h3>模块评估</h3>
-                                    <p class="panel-note" id="assessment-note">以当前左下角身份视角提交评分。</p>
-                                </div>
-                                <form id="assessment-form">
-                                    <div class="range-field">
-                                        <label for="assessment-difficulty">难度 <output id="assessment-difficulty-value">3</output></label>
-                                        <input id="assessment-difficulty" name="difficulty_score" type="range" min="1" max="5" step="1" value="3">
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="assessment-hours">预估时长（小时）</label>
-                                        <input id="assessment-hours" name="estimated_hours" type="number" min="0" step="0.5" class="input-field" value="1">
-                                    </div>
-                                    <div class="range-field">
-                                        <label for="assessment-boredom">枯燥度 <output id="assessment-boredom-value">3</output></label>
-                                        <input id="assessment-boredom" name="boredom_score" type="range" min="1" max="5" step="1" value="3">
-                                    </div>
-                                    <div class="range-field">
-                                        <label for="assessment-intensity">工作强度 <output id="assessment-intensity-value">3</output></label>
-                                        <input id="assessment-intensity" name="intensity_score" type="range" min="1" max="5" step="1" value="3">
-                                    </div>
-                                    <button type="submit" class="btn btn-primary">提交评估</button>
-                                </form>
-                                <div>
-                                    <h3>已有评估</h3>
-                                    <div id="assessment-list" class="assessment-list"></div>
-                                </div>
-                            </section>
-
-                            <section id="detail-locked-section" class="detail-section" hidden>
-                                <div class="panel-note">该模块当前不处于“待分配”状态，评分面板已隐藏。</div>
-                            </section>
                         </div>
                     </div>
                 </div>
@@ -1093,9 +1065,6 @@
             button.style.display = isManager ? '' : 'none';
         });
         document.querySelectorAll('[data-manager-action="add-module"]').forEach((button) => {
-            button.style.display = isManager ? '' : 'none';
-        });
-        document.querySelectorAll('[data-manager-action="save-dependencies"]').forEach((button) => {
             button.style.display = isManager ? '' : 'none';
         });
         document.querySelectorAll('[data-manager-action="batch-assign"]').forEach((button) => {
@@ -1622,6 +1591,8 @@
     }
 
     let selectedModuleButton = null;
+    let selectedModuleIds = new Set();
+    let isShiftSelectionActive = false;
 
     function formatScore(value) {
         return `⭐ ${Number(value).toFixed(2)}`;
@@ -1714,25 +1685,6 @@
         await Promise.all(moduleButtons.map((button) => loadModuleSummary(button.dataset.moduleId)));
     }
 
-    function updateRangeOutput(inputId, outputId, formatter) {
-        const input = document.getElementById(inputId);
-        const output = document.getElementById(outputId);
-        if (!input || !output) {
-            return;
-        }
-        const render = () => {
-            output.textContent = formatter ? formatter(input.value) : input.value;
-        };
-        input.addEventListener('input', render);
-        render();
-    }
-
-    function setDetailPanels(status) {
-        const isPending = status === '待分配';
-        document.getElementById('detail-assessment-section').hidden = !isPending;
-        document.getElementById('detail-locked-section').hidden = isPending;
-    }
-
     function isAssignmentLockedByAssessmentPeriod() {
         return getAssessmentPeriodStatus() === 'active';
     }
@@ -1741,7 +1693,7 @@
         return document.querySelectorAll('#project-module-layer button[data-module-id][data-module-status="待分配"]').length;
     }
 
-    function updateBatchAssignmentAction() {
+    async function updateBatchAssignmentAction() {
         const trigger = document.getElementById('batch-assignment-trigger');
         if (!trigger) {
             return;
@@ -1749,18 +1701,11 @@
 
         const isManager = isProjectManager();
         const pendingCount = getPendingModuleCount();
-        const isAssessmentActive = getAssessmentPeriodStatus() === 'active';
 
         trigger.style.display = isManager ? '' : 'none';
         if (!isManager) {
             trigger.disabled = true;
             trigger.title = '';
-            return;
-        }
-
-        if (isAssessmentActive) {
-            trigger.disabled = true;
-            trigger.title = '请等待评分结束';
             return;
         }
 
@@ -1773,6 +1718,25 @@
         if (pendingCount === 0) {
             trigger.disabled = true;
             trigger.title = '没有待分配模块';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/scoring/project/{{ project.id }}/progress`);
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.detail || '加载评分进度失败');
+            }
+
+            const effectiveCompletion = Boolean(data && data.effective_completion === true);
+            if (!effectiveCompletion) {
+                trigger.disabled = true;
+                trigger.title = '评分尚未全部完成';
+                return;
+            }
+        } catch (error) {
+            trigger.disabled = true;
+            trigger.title = '评分进度加载失败';
             return;
         }
 
@@ -2005,53 +1969,6 @@
         });
     }
 
-    function renderAssessments(assessments) {
-        const container = document.getElementById('assessment-list');
-        if (!container) {
-            return;
-        }
-
-        if (!assessments.length) {
-            container.innerHTML = '<div class="panel-note">还没有成员提交评估。</div>';
-            return;
-        }
-
-        const memberMap = new Map(
-            Array.from(document.querySelectorAll('#project-member-list article[data-member-id]')).map((card) => [
-                String(card.dataset.memberId),
-                card.dataset.memberName
-            ])
-        );
-
-        container.innerHTML = assessments.map((item) => {
-            const memberName = memberMap.get(String(item.member_id)) || `成员 #${item.member_id}`;
-            return `
-                <article class="assessment-item">
-                    <strong>${memberName}</strong>
-                    <div class="assessment-grid">
-                        <span>难度：${item.difficulty_score}</span>
-                        <span>时长：${item.estimated_hours} 小时</span>
-                        <span>枯燥：${item.boredom_score}</span>
-                        <span>强度：${item.intensity_score}</span>
-                    </div>
-                </article>
-            `;
-        }).join('');
-    }
-
-    async function loadAssessments(moduleId) {
-        try {
-            const response = await fetch(`/assessments/module/${moduleId}`);
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.detail || '加载评估列表失败');
-            }
-            renderAssessments(data);
-        } catch (error) {
-            document.getElementById('assessment-list').innerHTML = `<div class="panel-note">${error.message || '加载评估列表失败'}</div>`;
-        }
-    }
-
     function updateModuleNodePresentation(moduleId, ownerName, memberId, status) {
         const button = document.querySelector(`#project-module-layer button[data-module-id="${moduleId}"]`);
         if (!button) {
@@ -2087,81 +2004,45 @@
         updateBatchAssignmentAction();
     }
 
-    async function submitAssessmentForm(event) {
-        event.preventDefault();
-        if (!selectedModuleButton) {
-            showToast('请先选择模块', true);
-            return;
-        }
-
-        const memberId = getCurrentMemberId();
-        if (!memberId) {
-            showToast('请先在左下角切换当前视角成员', true);
-            return;
-        }
-
-        const form = event.currentTarget;
-        const payload = {
-            member_id: memberId,
-            module_id: parseInt(selectedModuleButton.dataset.moduleId, 10),
-            difficulty_score: parseInt(form.difficulty_score.value, 10),
-            estimated_hours: parseFloat(form.estimated_hours.value || '0'),
-            boredom_score: parseInt(form.boredom_score.value, 10),
-            intensity_score: parseInt(form.intensity_score.value, 10)
-        };
-
-        try {
-            const response = await fetch('/assessments/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.detail || '提交评估失败');
-            }
-            showToast('评估已提交');
-            await loadAssessments(payload.module_id);
-            await loadModuleSummary(payload.module_id);
-            await triggerAutoSummarize();
-        } catch (error) {
-            showToast(error.message || '提交评估失败', true);
-        }
-    }
-
-    async function triggerAutoSummarize() {
-        try {
-            const response = await fetch(`/scoring/project/{{ project.id }}/auto-summarize`, {
-                method: 'POST'
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                return;
-            }
-
-            if (data.summarized) {
-                showToast('所有有效评分已完成，系统已自动汇总综合分');
-            }
-        } catch (error) {
-            // 自动汇总失败不阻断正常打分流程
-        }
-    }
-
-    function selectModule(button) {
-        selectedModuleButton = button;
-
+    function syncSelectedModuleVisuals() {
         document.querySelectorAll('#project-module-layer button[data-module-id]').forEach((item) => {
-            item.dataset.selected = 'false';
+            item.dataset.selected = selectedModuleIds.has(String(item.dataset.moduleId)) ? 'true' : 'false';
         });
-        button.dataset.selected = 'true';
+    }
 
+    function renderSelectionDetail() {
         const detailEmpty = document.getElementById('project-detail-empty');
         const detailContent = document.getElementById('project-detail-content');
         const detailStatus = document.getElementById('detail-module-status');
-        const status = button.dataset.moduleStatus;
+
+        if (!selectedModuleButton) {
+            detailEmpty.hidden = false;
+            detailContent.hidden = true;
+            return;
+        }
+
+        const isMultiSelect = selectedModuleIds.size > 1;
 
         detailEmpty.hidden = true;
         detailContent.hidden = false;
+
+        if (isMultiSelect) {
+            document.getElementById('detail-module-name').textContent = `已选中 ${selectedModuleIds.size} 个模块`;
+            document.getElementById('detail-module-owner').textContent = '请继续选择，或取消 Shift 后单击某个模块查看详情';
+            document.getElementById('detail-module-hours').textContent = '多选模式';
+            document.getElementById('detail-module-types').textContent = '多选模式';
+            document.getElementById('detail-module-description').textContent = '当前为批量选择状态，右侧仅展示概要信息。';
+            document.getElementById('detail-module-score').textContent = '—';
+            document.getElementById('detail-module-score').dataset.empty = 'true';
+            document.getElementById('detail-score-count').textContent = '多选状态下不展示单模块综合分拆解';
+            detailStatus.textContent = '多选';
+            detailStatus.className = 'badge badge-primary';
+            renderScoreBreakdown(null);
+            return;
+        }
+
+        const button = selectedModuleButton;
+        const status = button.dataset.moduleStatus;
 
         document.getElementById('detail-module-name').textContent = button.dataset.moduleName;
         document.getElementById('detail-module-owner').textContent = button.dataset.moduleOwner || '未分配';
@@ -2170,8 +2051,6 @@
         document.getElementById('detail-module-description').textContent = button.dataset.moduleDescription || '暂无描述';
         detailStatus.textContent = status;
         detailStatus.className = 'badge badge-secondary';
-        setDetailPanels(status);
-        loadAssessments(button.dataset.moduleId);
         renderScoreBreakdown(moduleSummaryMap.get(String(button.dataset.moduleId)) || null);
 
         if (status === '已完成') {
@@ -2181,6 +2060,35 @@
         } else if (status === '待审核') {
             detailStatus.className = 'badge badge-warning';
         }
+    }
+
+    function selectModule(button, event) {
+        const moduleId = String(button.dataset.moduleId);
+        const shouldToggleSelection = Boolean((event && event.shiftKey) || isShiftSelectionActive);
+
+        if (shouldToggleSelection) {
+            if (selectedModuleIds.has(moduleId)) {
+                selectedModuleIds.delete(moduleId);
+            } else {
+                selectedModuleIds.add(moduleId);
+            }
+
+            if (selectedModuleIds.size === 0) {
+                selectedModuleButton = null;
+            } else if (selectedModuleIds.has(moduleId)) {
+                selectedModuleButton = button;
+            } else {
+                const lastSelectedId = Array.from(selectedModuleIds)[selectedModuleIds.size - 1];
+                selectedModuleButton = document.querySelector(`#project-module-layer button[data-module-id="${lastSelectedId}"]`);
+            }
+        } else {
+            selectedModuleIds.clear();
+            selectedModuleIds.add(moduleId);
+            selectedModuleButton = button;
+        }
+
+        syncSelectedModuleVisuals();
+        renderSelectionDetail();
     }
 
     document.addEventListener('click', function (event) {
@@ -2211,9 +2119,16 @@
 </script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        updateRangeOutput('assessment-difficulty', 'assessment-difficulty-value');
-        updateRangeOutput('assessment-boredom', 'assessment-boredom-value');
-        updateRangeOutput('assessment-intensity', 'assessment-intensity-value');
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Shift') {
+                isShiftSelectionActive = true;
+            }
+        });
+        document.addEventListener('keyup', function (event) {
+            if (event.key === 'Shift') {
+                isShiftSelectionActive = false;
+            }
+        });
         updateCurrentMemberHighlight();
         updateManagerActions();
         updateBatchAdjustmentNote();
@@ -2221,16 +2136,12 @@
         loadAllModuleSummaries();
         autoSelectModuleFromQuery();
 
-        const assessmentForm = document.getElementById('assessment-form');
         const assessmentPeriodForm = document.getElementById('assessment-period-form');
         const assessmentStartModeInputs = document.querySelectorAll('input[name="start_mode"]');
         const assessmentStartAtInput = document.getElementById('assessment-start-at');
         const assessmentDurationPreset = document.getElementById('assessment-duration-preset');
         const assessmentDurationCustom = document.getElementById('assessment-duration-custom');
 
-        if (assessmentForm) {
-            assessmentForm.addEventListener('submit', submitAssessmentForm);
-        }
         if (assessmentPeriodForm) {
             assessmentPeriodForm.addEventListener('submit', submitAssessmentPeriodForm);
         }
@@ -2325,9 +2236,6 @@
         const canvasSvg = document.getElementById('project-canvas-svg');
         const moduleLayer = document.getElementById('project-module-layer');
         const moduleNodes = Array.from(document.querySelectorAll('#project-module-layer button[data-module-id]'));
-        const saveButton = Array.from(document.querySelectorAll('#project-board-actions button'))
-            .find((button) => button.textContent.trim() === '保存依赖关系');
-
         if (!canvasContainer || !canvasSvg || !moduleLayer || !moduleNodes.length) {
             return;
         }
@@ -2543,7 +2451,7 @@
             }
         }
 
-        function addConnection(from, to) {
+        async function addConnection(from, to) {
             if (!from || !to || from === to) {
                 return;
             }
@@ -2554,6 +2462,47 @@
             connections.push({ from, to });
             selectedConnectionKey = key;
             renderConnections();
+
+            if (!isProjectManager()) {
+                return;
+            }
+
+            const currentMemberId = getCurrentMemberId();
+            if (!currentMemberId) {
+                connections = connections.filter((item) => connectionKey(item.from, item.to) !== key);
+                selectedConnectionKey = null;
+                renderConnections();
+                showToast('请先在左下角切换当前视角成员', true);
+                return;
+            }
+
+            try {
+                const response = await fetch(`/projects/${projectId}/dependencies?current_member_id=${currentMemberId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        preceding_module_id: parseInt(from, 10),
+                        dependent_module_id: parseInt(to, 10)
+                    })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.detail || '依赖关系保存失败');
+                }
+
+                persistedConnections.push({
+                    id: data.id,
+                    from: String(data.preceding_module_id),
+                    to: String(data.dependent_module_id)
+                });
+            } catch (error) {
+                connections = connections.filter((item) => connectionKey(item.from, item.to) !== key);
+                if (selectedConnectionKey === key) {
+                    selectedConnectionKey = null;
+                }
+                renderConnections();
+                showToast(error.message || '依赖关系保存失败', true);
+            }
         }
 
         function beginDrag(event, node) {
@@ -2692,62 +2641,6 @@
             }
         }
 
-        async function saveConnections() {
-            if (!isProjectManager()) {
-                showToast('只有项目创建者才能保存依赖关系', true);
-                return;
-            }
-
-            const currentMemberId = getCurrentMemberId();
-            if (!currentMemberId) {
-                showToast('请先在左下角切换当前视角成员', true);
-                return;
-            }
-
-            try {
-                const persistedMap = new Map(
-                    persistedConnections.map((item) => [connectionKey(item.from, item.to), item])
-                );
-                const currentKeys = new Set(connections.map((item) => connectionKey(item.from, item.to)));
-                const additions = connections.filter((item) => !persistedMap.has(connectionKey(item.from, item.to)));
-                const deletions = persistedConnections.filter((item) => !currentKeys.has(connectionKey(item.from, item.to)));
-
-                if (deletions.length) {
-                    await Promise.all(deletions.map(async (item) => {
-                        const response = await fetch(`/projects/${projectId}/dependencies/${item.id}?current_member_id=${currentMemberId}`, {
-                            method: 'DELETE'
-                        });
-                        if (!response.ok) {
-                            throw new Error('删除旧依赖失败');
-                        }
-                    }));
-                }
-
-                if (additions.length) {
-                    const payload = {
-                        dependencies: additions.map((item) => ({
-                            preceding_module_id: parseInt(item.from, 10),
-                            dependent_module_id: parseInt(item.to, 10)
-                        }))
-                    };
-                    const response = await fetch(`/projects/${projectId}/dependencies?current_member_id=${currentMemberId}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    const data = await response.json().catch(() => ({}));
-                    if (!response.ok) {
-                        throw new Error(data.detail || '保存失败');
-                    }
-                }
-
-                showToast('保存成功');
-                await loadConnections();
-            } catch (error) {
-                showToast(error.message || '保存失败', true);
-            }
-        }
-
         moduleNodes.forEach((node) => {
             ensureAnchors(node);
             node.style.zIndex = '2';
@@ -2819,6 +2712,10 @@
                 return;
             }
 
+            if (event.target.closest('.anchor-in, .anchor-out')) {
+                return;
+            }
+
             const hitConnectionKey = findConnectionAtPoint(event);
             if (hitConnectionKey) {
                 selectedConnectionKey = hitConnectionKey;
@@ -2840,19 +2737,51 @@
             endLineDraw(event);
         });
 
-        document.addEventListener('keydown', function (event) {
+        document.addEventListener('keydown', async function (event) {
             if ((event.key === 'Delete' || event.key === 'Backspace') && selectedConnectionKey) {
-                connections = connections.filter((item) => connectionKey(item.from, item.to) !== selectedConnectionKey);
+                const targetConnection = connections.find((item) => connectionKey(item.from, item.to) === selectedConnectionKey);
+                const persistedConnection = persistedConnections.find((item) => connectionKey(item.from, item.to) === selectedConnectionKey);
+                const deletedKey = selectedConnectionKey;
+
+                connections = connections.filter((item) => connectionKey(item.from, item.to) !== deletedKey);
                 selectedConnectionKey = null;
                 renderConnections();
+
+                if (!persistedConnection) {
+                    return;
+                }
+
+                const currentMemberId = getCurrentMemberId();
+                if (!currentMemberId) {
+                    if (targetConnection) {
+                        connections.push(targetConnection);
+                    }
+                    selectedConnectionKey = deletedKey;
+                    renderConnections();
+                    showToast('请先在左下角切换当前视角成员', true);
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/projects/${projectId}/dependencies/${persistedConnection.id}?current_member_id=${currentMemberId}`, {
+                        method: 'DELETE'
+                    });
+                    if (!response.ok) {
+                        const data = await response.json().catch(() => ({}));
+                        throw new Error(data.detail || '删除依赖关系失败');
+                    }
+
+                    persistedConnections = persistedConnections.filter((item) => item.id !== persistedConnection.id);
+                } catch (error) {
+                    if (targetConnection) {
+                        connections.push(targetConnection);
+                    }
+                    selectedConnectionKey = deletedKey;
+                    renderConnections();
+                    showToast(error.message || '删除依赖关系失败', true);
+                }
             }
         });
-
-        if (saveButton) {
-            saveButton.onclick = function () {
-                saveConnections();
-            };
-        }
 
         applyStoredPositions();
         renderConnections();

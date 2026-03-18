@@ -17,6 +17,7 @@ from typing import List
 
 from app import models, schemas
 from app.api.dependencies import get_db
+from app.utils.dependency_checker import check_module_unlocked
 
 router = APIRouter(prefix="/files", tags=["文件成果管理"])
 
@@ -54,6 +55,12 @@ def upload_module_file(
 
     if module.status != "开发中":
         raise HTTPException(status_code=400, detail="只有开发中的模块才能上传文件。")
+
+    if not check_module_unlocked(module_id, db):
+        raise HTTPException(
+            status_code=403,
+            detail="该模块的前置模块尚未全部完成审核，暂不能提交文件。"
+        )
 
     # 2. 【进阶安全校验】验证文件扩展名是不是这个模块允许的？
     if module.allowed_file_types:
@@ -129,8 +136,26 @@ def _review_file(file_id: int, action: str, current_member_id: int, db: Session)
     if normalized_action == "approve":
         db_file.status = "Approved"
         module.status = "已完成" # 连带模块状态变为完美收官！
+        db.flush()
+
+        downstream_deps = db.query(models.FileDependency).filter(
+            models.FileDependency.preceding_module_id == module.id
+        ).all()
+        unlocked_modules = []
+        for dep in downstream_deps:
+            dependent_module = db.query(models.Module).filter(
+                models.Module.id == dep.dependent_module_id
+            ).first()
+            if dependent_module and dependent_module.status == "待分配":
+                if check_module_unlocked(dep.dependent_module_id, db):
+                    unlocked_modules.append(dependent_module.name)
+
         db.commit()
-        return {"message": "审核通过！该模块正式完工。"}
+        result = {"message": "审核通过！该模块正式完工。"}
+        if unlocked_modules:
+            result["unlocked_modules"] = unlocked_modules
+            result["message"] += f" 以下后置模块已解锁：{'、'.join(unlocked_modules)}"
+        return result
 
     if normalized_action == "reject":
         db_file.status = "Rejected"

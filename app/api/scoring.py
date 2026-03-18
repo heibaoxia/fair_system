@@ -13,20 +13,46 @@ from app.api.dependencies import get_db
 router = APIRouter(prefix="/scoring", tags=["综合分计算"])
 
 
-def _calc_module_summary(module: models.Module, project: models.Project, db: Session) -> dict:
-    """
-    内部工具函数：计算单个模块的综合分。
-    只统计已实际提交的有效评分。
-    """
-    assessments = db.query(models.ModuleAssessment).filter(
-        models.ModuleAssessment.module_id == module.id
-    ).all()
+def _get_project_dimensions(project: models.Project, db: Session) -> List[models.ScoringDimension]:
+    return db.query(models.ScoringDimension).filter(
+        models.ScoringDimension.project_id == project.id
+    ).order_by(models.ScoringDimension.sort_order.asc(), models.ScoringDimension.id.asc()).all()
+
+
+def _build_legacy_empty_summary(module: models.Module, project: models.Project) -> dict:
+    empty_weight_difficulty = float(getattr(project, "weight_difficulty", 0.25) or 0.25)
+    empty_weight_hours = float(getattr(project, "weight_hours", 0.25) or 0.25)
+    empty_weight_boredom = float(getattr(project, "weight_boredom", 0.25) or 0.25)
+    empty_weight_intensity = float(getattr(project, "weight_intensity", 0.25) or 0.25)
+    return {
+        "module_id": module.id,
+        "module_name": module.name,
+        "assessment_count": 0,
+        "avg_difficulty": 0,
+        "avg_estimated_hours": 0,
+        "avg_boredom": 0,
+        "avg_intensity": 0,
+        "composite_score": 0,
+        "weights_used": {
+            "difficulty": empty_weight_difficulty,
+            "hours": empty_weight_hours,
+            "boredom": empty_weight_boredom,
+            "intensity": empty_weight_intensity,
+        },
+        "breakdown": {
+            "difficulty_component": 0,
+            "hours_component": 0,
+            "boredom_component": 0,
+            "intensity_component": 0,
+        }
+    }
+
+
+def _build_custom_summary(module: models.Module, project: models.Project, assessments: List[models.ModuleAssessment], db: Session) -> dict:
+    dimensions = _get_project_dimensions(project, db)
+    weight_map = {dimension.name: float(dimension.weight or 0.0) for dimension in dimensions}
 
     if not assessments:
-        empty_weight_difficulty = float(getattr(project, "weight_difficulty", 0.25) or 0.25)
-        empty_weight_hours = float(getattr(project, "weight_hours", 0.25) or 0.25)
-        empty_weight_boredom = float(getattr(project, "weight_boredom", 0.25) or 0.25)
-        empty_weight_intensity = float(getattr(project, "weight_intensity", 0.25) or 0.25)
         return {
             "module_id": module.id,
             "module_name": module.name,
@@ -36,19 +62,63 @@ def _calc_module_summary(module: models.Module, project: models.Project, db: Ses
             "avg_boredom": 0,
             "avg_intensity": 0,
             "composite_score": 0,
-            "weights_used": {
-                "difficulty": empty_weight_difficulty,
-                "hours": empty_weight_hours,
-                "boredom": empty_weight_boredom,
-                "intensity": empty_weight_intensity,
-            },
-            "breakdown": {
-                "difficulty_component": 0,
-                "hours_component": 0,
-                "boredom_component": 0,
-                "intensity_component": 0,
-            }
+            "weights_used": weight_map,
+            "breakdown": {dimension.name: 0 for dimension in dimensions},
+            "dimension_averages": [],
         }
+
+    scores_by_dimension = {dimension.id: [] for dimension in dimensions}
+    for assessment in assessments:
+        for dimension_score in getattr(assessment, "dimension_scores", []) or []:
+            if dimension_score.dimension_id in scores_by_dimension:
+                scores_by_dimension[dimension_score.dimension_id].append(float(dimension_score.score or 0.0))
+
+    breakdown = {}
+    dimension_averages = []
+    composite = 0.0
+    for dimension in dimensions:
+        dimension_scores = scores_by_dimension.get(dimension.id, [])
+        avg_score = sum(dimension_scores) / len(dimension_scores) if dimension_scores else 0.0
+        component = avg_score * float(dimension.weight or 0.0)
+        composite += component
+        breakdown[dimension.name] = round(float(component), 4)
+        dimension_averages.append({
+            "dimension_id": dimension.id,
+            "name": dimension.name,
+            "weight": round(float(dimension.weight or 0.0), 4),
+            "avg_score": round(float(avg_score), 2),
+            "component": round(float(component), 4),
+        })
+
+    return {
+        "module_id": module.id,
+        "module_name": module.name,
+        "assessment_count": len(assessments),
+        "avg_difficulty": 0,
+        "avg_estimated_hours": 0,
+        "avg_boredom": 0,
+        "avg_intensity": 0,
+        "composite_score": round(float(composite), 2),
+        "weights_used": weight_map,
+        "breakdown": breakdown,
+        "dimension_averages": dimension_averages,
+    }
+
+
+def _calc_module_summary(module: models.Module, project: models.Project, db: Session) -> dict:
+    """
+    内部工具函数：计算单个模块的综合分。
+    只统计已实际提交的有效评分。
+    """
+    assessments = db.query(models.ModuleAssessment).filter(
+        models.ModuleAssessment.module_id == module.id
+    ).all()
+
+    if getattr(project, "use_custom_dimensions", False):
+        return _build_custom_summary(module, project, assessments, db)
+
+    if not assessments:
+        return _build_legacy_empty_summary(module, project)
 
     weight_difficulty = float(getattr(project, "weight_difficulty", 0.25) or 0.25)
     weight_hours = float(getattr(project, "weight_hours", 0.25) or 0.25)
@@ -56,10 +126,10 @@ def _calc_module_summary(module: models.Module, project: models.Project, db: Ses
     weight_intensity = float(getattr(project, "weight_intensity", 0.25) or 0.25)
 
     count = len(assessments)
-    avg_d = sum(int(getattr(a, "difficulty_score", 0) or 0) for a in assessments) / count
+    avg_d = sum(float(getattr(a, "difficulty_score", 0) or 0) for a in assessments) / count
     avg_h = sum(float(getattr(a, "estimated_hours", 0.0) or 0.0) for a in assessments) / count
-    avg_b = sum(int(getattr(a, "boredom_score", 0) or 0) for a in assessments) / count
-    avg_i = sum(int(getattr(a, "intensity_score", 0) or 0) for a in assessments) / count
+    avg_b = sum(float(getattr(a, "boredom_score", 0) or 0) for a in assessments) / count
+    avg_i = sum(float(getattr(a, "intensity_score", 0) or 0) for a in assessments) / count
 
     # 加权综合分
     d_comp = avg_d * weight_difficulty
@@ -106,12 +176,16 @@ def build_project_summary_payload(project: models.Project, modules: List[models.
     return {
         "project_id": project.id,
         "project_name": project.name,
-        "weights": {
-            "difficulty": float(getattr(project, "weight_difficulty", 0.25) or 0.25),
-            "hours": float(getattr(project, "weight_hours", 0.25) or 0.25),
-            "boredom": float(getattr(project, "weight_boredom", 0.25) or 0.25),
-            "intensity": float(getattr(project, "weight_intensity", 0.25) or 0.25),
-        },
+        "weights": (
+            {dimension.name: float(dimension.weight or 0.0) for dimension in _get_project_dimensions(project, db)}
+            if getattr(project, "use_custom_dimensions", False)
+            else {
+                "difficulty": float(getattr(project, "weight_difficulty", 0.25) or 0.25),
+                "hours": float(getattr(project, "weight_hours", 0.25) or 0.25),
+                "boredom": float(getattr(project, "weight_boredom", 0.25) or 0.25),
+                "intensity": float(getattr(project, "weight_intensity", 0.25) or 0.25),
+            }
+        ),
         "is_summarized": is_summarized,
         "project_composite_score": round(float(project_composite_score), 2),
         "project_estimated_hours": round(float(project_estimated_hours), 2),
