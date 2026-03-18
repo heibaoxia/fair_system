@@ -5,7 +5,7 @@
 我们只需要在这个文件里写 Python 类 (Class)，SQLAlchemy 就会在运行初始化脚本时，自动帮我们在数据库里把这些相关的表格建立起来。
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Float, Table
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, Float, Table
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -65,13 +65,6 @@ class Project(Base):
     total_revenue = Column(Float, default=0.0)
     assessment_start = Column(DateTime, nullable=True)
     assessment_end = Column(DateTime, nullable=True)
-
-    # 四维评分权重（管理员设置，对所有成员可见，用于综合分计算）
-    weight_difficulty = Column(Float, default=0.25)   # 难度权重
-    weight_hours = Column(Float, default=0.25)        # 预估时长权重
-    weight_boredom = Column(Float, default=0.25)      # 枯燥度权重
-    weight_intensity = Column(Float, default=0.25)    # 强度权重
-    use_custom_dimensions = Column(Boolean, default=False)
 
     # 这是一个外键 (ForeignKey)，意味着这一列存着另一个表的 ID。
     # 比如这里填了 1，说明是 members 表里 ID 为 1 的用户创建了这个项目。
@@ -193,13 +186,6 @@ class ModuleAssessment(Base):
     member_id = Column(Integer, ForeignKey("members.id"))
     # 打的哪个模块？
     module_id = Column(Integer, ForeignKey("modules.id"))
-
-    # 旧版四维打分（保留向后兼容，新项目使用 DimensionScore）
-    # 字段类型从 Integer 改为 Float 以支持小数打分（0~10）
-    difficulty_score = Column(Float, default=0.0)
-    estimated_hours = Column(Float, default=0.0)
-    boredom_score = Column(Float, default=0.0)
-    intensity_score = Column(Float, default=0.0)
 
     created_at = Column(DateTime, default=datetime.now)
 

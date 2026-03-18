@@ -75,18 +75,12 @@ class DimensionScore(DimensionScoreCreate, ConfiguredModel):
     id: int
 
 
-class AssessmentBase(BaseModel):
-    difficulty_score: Optional[float] = Field(default=None, ge=0, le=10)
-    estimated_hours: Optional[float] = Field(default=None, ge=0)
-    boredom_score: Optional[float] = Field(default=None, ge=0, le=10)
-    intensity_score: Optional[float] = Field(default=None, ge=0, le=10)
-
-class AssessmentCreate(AssessmentBase):
+class AssessmentCreate(BaseModel):
     member_id: int # 谁提交的评估
     module_id: int # 在给别人打分时，必须要告诉系统这是对哪个模块打的分
-    dimension_scores: Optional[List[DimensionScoreCreate]] = []
+    dimension_scores: List[DimensionScoreCreate] = []
 
-class ModuleAssessment(AssessmentBase, ConfiguredModel):
+class ModuleAssessment(ConfiguredModel):
     id: int
     member_id: int
     module_id: int
@@ -183,19 +177,12 @@ class ProjectCreate(ProjectBase):
     # 接收前端传来的模块依赖关系，比如：[{"preceding": 0, "dependent": 1}]
     # 这里的 0, 1 是 new_modules 列表里的索引号。
     dependencies: List[dict] = []
-    scoring_dimensions: Optional[List[ScoringDimensionCreate]] = []
+    scoring_dimensions: List[ScoringDimensionCreate] = []
 
 class AssessmentPeriodSet(BaseModel):
     start_mode: str
     start_at: Optional[datetime] = None
     duration_hours: float
-
-class ProjectWeightsUpdate(BaseModel):
-    """管理员设置四维评分权重，四个权重之和应等于 1.0"""
-    weight_difficulty: float = 0.25
-    weight_hours: float = 0.25
-    weight_boredom: float = 0.25
-    weight_intensity: float = 0.25
 
 class Project(ProjectBase, ConfiguredModel):
     id: int
@@ -204,12 +191,6 @@ class Project(ProjectBase, ConfiguredModel):
     total_revenue: float
     assessment_start: Optional[datetime] = None
     assessment_end: Optional[datetime] = None
-    # 四维权重（所有成员可见）
-    weight_difficulty: float = 0.25
-    weight_hours: float = 0.25
-    weight_boredom: float = 0.25
-    weight_intensity: float = 0.25
-    use_custom_dimensions: bool = False
     created_at: datetime
     
     # 获取这个项目所有的模块

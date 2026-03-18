@@ -46,7 +46,6 @@ class ScoringPageRouteTests(unittest.TestCase):
             name="评分项目",
             description="项目描述",
             created_by=owner.id,
-            use_custom_dimensions=True,
             assessment_start=datetime.now() - timedelta(hours=1),
             assessment_end=datetime.now() + timedelta(hours=2),
         )

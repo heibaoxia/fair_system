@@ -413,6 +413,98 @@
         background: #f8fafc;
     }
 
+    .create-project-modal-content {
+        max-width: 920px;
+    }
+
+    .create-project-form {
+        display: grid;
+        gap: 18px;
+    }
+
+    .create-project-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .create-project-grid .form-group:last-child {
+        grid-column: 1 / -1;
+    }
+
+    .project-config-section {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 18px;
+        background: #f8fbff;
+    }
+
+    .project-config-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .project-config-head p,
+    .project-config-note,
+    .config-empty {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    .project-config-list {
+        display: grid;
+        gap: 10px;
+    }
+
+    .config-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(120px, 0.45fr) auto;
+        gap: 10px;
+        align-items: end;
+        padding: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.92);
+    }
+
+    .config-row.module-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(120px, 0.38fr) minmax(140px, 0.55fr) auto;
+    }
+
+    .config-row .form-group {
+        margin-bottom: 0;
+    }
+
+    .weight-summary {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 0.88rem;
+        font-weight: 700;
+        background: rgba(37, 99, 235, 0.1);
+        color: #1d4ed8;
+    }
+
+    .weight-summary.is-invalid {
+        background: rgba(239, 68, 68, 0.12);
+        color: #b91c1c;
+    }
+
+    .config-empty {
+        padding: 14px 16px;
+        border: 1px dashed rgba(148, 163, 184, 0.35);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.88);
+    }
+
     @media (max-width: 1120px) {
         .stats-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -453,6 +545,12 @@
         .status-row {
             grid-template-columns: 1fr;
             display: grid;
+        }
+
+        .create-project-grid,
+        .config-row,
+        .config-row.module-row {
+            grid-template-columns: 1fr;
         }
 
         .project-foot {
@@ -519,10 +617,10 @@
         <article class="panel quick-action">
             <div>
                 <h2>快捷操作</h2>
-                <p>快速发起新项目，默认以成员 `#1` 的身份创建。</p>
+                <p>当前成员切换到 PM 后，可在这里一次性设置项目名、模块、评分维度和权重。</p>
             </div>
             <div class="quick-action-row">
-                <button type="button" class="btn btn-primary" onclick="createProjectQuickly()">+ 新建项目</button>
+                <button type="button" class="btn btn-primary" onclick="openCreateProjectModal()">+ 新建项目</button>
             </div>
         </article>
         <article class="panel quick-action">
@@ -683,6 +781,65 @@
     </section>
 </div>
 
+<div id="create-project-modal" class="modal-overlay">
+    <div class="modal-content create-project-modal-content">
+        <div class="modal-header">
+            <div>
+                <h2 class="modal-title">创建项目</h2>
+                <p class="project-config-note">只有当前切换到的 PM 成员可以创建项目，并在这里一次性冻结评分维度与权重。</p>
+            </div>
+            <button type="button" class="modal-close" onclick="closeCreateProjectModal()">&times;</button>
+        </div>
+
+        <form id="create-project-form" class="create-project-form">
+            <div class="create-project-grid">
+                <div class="form-group">
+                    <label for="create-project-name">项目名称</label>
+                    <input id="create-project-name" name="name" type="text" placeholder="例如：春季活动改版" required>
+                </div>
+                <div class="form-group">
+                    <label for="create-project-current-pm">当前 PM</label>
+                    <input id="create-project-current-pm" type="text" value="未选择成员" disabled>
+                </div>
+                <div class="form-group">
+                    <label for="create-project-description">项目描述</label>
+                    <textarea id="create-project-description" name="description" rows="3" placeholder="说明这个项目的目标、范围和补充背景"></textarea>
+                </div>
+            </div>
+
+            <section class="project-config-section">
+                <div class="project-config-head">
+                    <div>
+                        <h3>评分维度</h3>
+                        <p>至少保留 1 个维度，权重总和必须等于 1。</p>
+                    </div>
+                    <div class="quick-action-row">
+                        <span id="dimension-weight-summary" class="weight-summary">权重合计 0.00</span>
+                        <button type="button" class="btn btn-secondary" onclick="appendDimensionRow()">+ 添加维度</button>
+                    </div>
+                </div>
+                <div id="create-project-dimensions" class="project-config-list"></div>
+            </section>
+
+            <section class="project-config-section">
+                <div class="project-config-head">
+                    <div>
+                        <h3>项目模块</h3>
+                        <p>可先录入模块草案，不填也可以，后续进项目详情页再补充。</p>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="appendModuleRow()">+ 添加模块</button>
+                </div>
+                <div id="create-project-modules" class="project-config-list"></div>
+            </section>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeCreateProjectModal()">取消</button>
+                <button type="submit" class="btn btn-primary">创建项目</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div id="project-context-menu" class="context-menu" hidden>
     <button type="button" id="project-delete-action" class="danger">删除项目</button>
 </div>
@@ -690,33 +847,286 @@
 <script>
     let contextProjectTarget = null;
 
-    async function createProjectQuickly() {
-        const name = window.prompt('请输入项目名称');
-        if (!name) return;
+    function updateCurrentPmField() {
+        const currentPmField = document.getElementById('create-project-current-pm');
+        if (!currentPmField) {
+            return;
+        }
 
-        const description = window.prompt('请输入项目描述（可留空）') || '通过工作台快捷创建';
+        const currentMemberId = getCurrentMemberId();
+        if (currentMemberId === null || currentMemberId <= 0) {
+            currentPmField.value = '未选择 PM 成员';
+            return;
+        }
+
+        currentPmField.value = `成员 #${currentMemberId}`;
+    }
+
+    function buildConfigEmpty(message) {
+        const node = document.createElement('div');
+        node.className = 'config-empty';
+        node.textContent = message;
+        return node;
+    }
+
+    function refreshConfigEmptyState(containerId, message, rowSelector) {
+        const container = document.getElementById(containerId);
+        if (!container) {
+            return;
+        }
+
+        const existingEmpty = container.querySelector('.config-empty');
+        const hasRows = container.querySelector(rowSelector);
+        if (hasRows) {
+            if (existingEmpty) {
+                existingEmpty.remove();
+            }
+            return;
+        }
+
+        if (!existingEmpty) {
+            container.appendChild(buildConfigEmpty(message));
+        }
+    }
+
+    function appendDimensionRow(initialData = {}) {
+        const container = document.getElementById('create-project-dimensions');
+        if (!container) {
+            return;
+        }
+
+        const row = document.createElement('div');
+        row.className = 'config-row dimension-row';
+        row.innerHTML = `
+            <div class="form-group">
+                <label>维度名称</label>
+                <input type="text" data-role="dimension-name" placeholder="例如：复杂度" value="${initialData.name || ''}">
+            </div>
+            <div class="form-group">
+                <label>权重</label>
+                <input type="number" data-role="dimension-weight" min="0" max="1" step="0.01" value="${Number(initialData.weight ?? 0).toFixed(2)}">
+            </div>
+            <button type="button" class="btn btn-secondary" data-role="remove-dimension">删除</button>
+        `;
+
+        row.querySelector('[data-role="remove-dimension"]').addEventListener('click', () => {
+            row.remove();
+            refreshConfigEmptyState('create-project-dimensions', '还没有评分维度，请至少添加一个。', '.dimension-row');
+            updateDimensionWeightSummary();
+        });
+        row.querySelector('[data-role="dimension-weight"]').addEventListener('input', updateDimensionWeightSummary);
+
+        const emptyState = container.querySelector('.config-empty');
+        if (emptyState) {
+            emptyState.remove();
+        }
+
+        container.appendChild(row);
+        updateDimensionWeightSummary();
+    }
+
+    function appendModuleRow(initialData = {}) {
+        const container = document.getElementById('create-project-modules');
+        if (!container) {
+            return;
+        }
+
+        const row = document.createElement('div');
+        row.className = 'config-row module-row';
+        row.innerHTML = `
+            <div class="form-group">
+                <label>模块名称</label>
+                <input type="text" data-role="module-name" placeholder="例如：支付回调接口" value="${initialData.name || ''}">
+            </div>
+            <div class="form-group">
+                <label>模块描述</label>
+                <input type="text" data-role="module-description" placeholder="补充说明模块范围" value="${initialData.description || ''}">
+            </div>
+            <div class="form-group">
+                <label>预估工时</label>
+                <input type="number" data-role="module-hours" min="0" step="0.5" value="${Number(initialData.estimated_hours ?? 0).toFixed(1)}">
+            </div>
+            <div class="form-group">
+                <label>成果格式</label>
+                <input type="text" data-role="module-file-types" placeholder=".zip,.md" value="${initialData.allowed_file_types || ''}">
+            </div>
+            <button type="button" class="btn btn-secondary" data-role="remove-module">删除</button>
+        `;
+
+        row.querySelector('[data-role="remove-module"]').addEventListener('click', () => {
+            row.remove();
+            refreshConfigEmptyState('create-project-modules', '暂时没有预设模块，创建后可去项目详情页继续添加。', '.module-row');
+        });
+
+        const emptyState = container.querySelector('.config-empty');
+        if (emptyState) {
+            emptyState.remove();
+        }
+
+        container.appendChild(row);
+    }
+
+    function resetCreateProjectForm() {
+        const form = document.getElementById('create-project-form');
+        const dimensionContainer = document.getElementById('create-project-dimensions');
+        const moduleContainer = document.getElementById('create-project-modules');
+        if (!form || !dimensionContainer || !moduleContainer) {
+            return;
+        }
+
+        form.reset();
+        updateCurrentPmField();
+        dimensionContainer.innerHTML = '';
+        moduleContainer.innerHTML = '';
+        appendDimensionRow({ name: '复杂度', weight: 0.5 });
+        appendDimensionRow({ name: '工作量', weight: 0.5 });
+        appendModuleRow();
+        refreshConfigEmptyState('create-project-modules', '暂时没有预设模块，创建后可去项目详情页继续添加。', '.module-row');
+        updateDimensionWeightSummary();
+    }
+
+    function openCreateProjectModal() {
+        const currentMemberId = getCurrentMemberId();
+        if (currentMemberId === null || currentMemberId <= 0) {
+            showToast('请先切换到一个 PM 成员，再创建项目。', true);
+            return;
+        }
+
+        resetCreateProjectForm();
+        document.getElementById('create-project-modal').classList.add('active');
+    }
+
+    function closeCreateProjectModal() {
+        document.getElementById('create-project-modal').classList.remove('active');
+    }
+
+    function getDimensionDrafts() {
+        return Array.from(document.querySelectorAll('#create-project-dimensions .dimension-row')).map((row) => ({
+            name: row.querySelector('[data-role="dimension-name"]').value.trim(),
+            weight: Number(row.querySelector('[data-role="dimension-weight"]').value || 0),
+        }));
+    }
+
+    function updateDimensionWeightSummary() {
+        const summary = document.getElementById('dimension-weight-summary');
+        if (!summary) {
+            return;
+        }
+
+        const dimensions = getDimensionDrafts();
+        const total = dimensions.reduce((sum, item) => sum + (Number.isFinite(item.weight) ? item.weight : 0), 0);
+        const isValid = dimensions.length > 0 && Math.abs(total - 1) <= 0.01;
+        summary.textContent = `权重合计 ${total.toFixed(2)}`;
+        summary.classList.toggle('is-invalid', !isValid);
+    }
+
+    function collectScoringDimensions() {
+        const dimensions = getDimensionDrafts();
+        if (!dimensions.length) {
+            throw new Error('请至少设置一个评分维度');
+        }
+
+        const names = new Set();
+        const normalized = dimensions.map((item) => {
+            if (!item.name) {
+                throw new Error('评分维度名称不能为空');
+            }
+            if (!Number.isFinite(item.weight) || item.weight < 0 || item.weight > 1) {
+                throw new Error(`维度“${item.name}”的权重必须在 0 到 1 之间`);
+            }
+            if (names.has(item.name)) {
+                throw new Error(`评分维度名称不能重复：${item.name}`);
+            }
+            names.add(item.name);
+            return {
+                name: item.name,
+                weight: Number(item.weight.toFixed(2)),
+            };
+        });
+
+        const total = normalized.reduce((sum, item) => sum + item.weight, 0);
+        if (Math.abs(total - 1) > 0.01) {
+            throw new Error(`评分维度权重之和必须为 1，当前为 ${total.toFixed(2)}`);
+        }
+
+        return normalized;
+    }
+
+    function collectModules() {
+        return Array.from(document.querySelectorAll('#create-project-modules .module-row')).reduce((items, row) => {
+            const name = row.querySelector('[data-role="module-name"]').value.trim();
+            const description = row.querySelector('[data-role="module-description"]').value.trim();
+            const allowedFileTypes = row.querySelector('[data-role="module-file-types"]').value.trim();
+            const hoursValue = row.querySelector('[data-role="module-hours"]').value;
+            const estimatedHours = hoursValue === '' ? 0 : Number(hoursValue);
+            const isEmpty = !name && !description && !allowedFileTypes && (!hoursValue || estimatedHours === 0);
+
+            if (isEmpty) {
+                return items;
+            }
+            if (!name) {
+                throw new Error('如果填写了模块信息，模块名称不能为空');
+            }
+            if (!Number.isFinite(estimatedHours) || estimatedHours < 0) {
+                throw new Error(`模块“${name}”的预估工时必须大于等于 0`);
+            }
+
+            items.push({
+                name,
+                description,
+                estimated_hours: Number(estimatedHours.toFixed(1)),
+                allowed_file_types: allowedFileTypes,
+            });
+            return items;
+        }, []);
+    }
+
+    async function submitCreateProjectForm(event) {
+        event.preventDefault();
+
+        const currentMemberId = getCurrentMemberId();
+        if (currentMemberId === null || currentMemberId <= 0) {
+            showToast('当前成员不是可创建项目的 PM，请先切换成员。', true);
+            return;
+        }
+
+        const form = event.currentTarget;
+        const name = form.querySelector('#create-project-name').value.trim();
+        const description = form.querySelector('#create-project-description').value.trim();
+
+        if (!name) {
+            showToast('项目名称不能为空', true);
+            return;
+        }
 
         try {
-            const response = await fetch('/projects/?created_by_member_id=1', {
+            const payload = {
+                name,
+                description,
+                dependencies: [],
+                new_modules: collectModules(),
+                scoring_dimensions: collectScoringDimensions(),
+            };
+
+            const response = await fetch(`/projects/?created_by_member_id=${currentMemberId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    name,
-                    description
-                })
+                body: JSON.stringify(payload)
             });
+            const data = await response.json().catch(() => ({}));
 
             if (!response.ok) {
-                throw new Error(await response.text());
+                throw new Error(getApiErrorMessage(data, '创建项目失败'));
             }
 
+            closeCreateProjectModal();
             showToast('项目创建成功');
             setTimeout(() => window.location.reload(), 500);
         } catch (error) {
             console.error('创建项目失败', error);
-            showToast('创建项目失败，请检查成员 #1 是否存在', true);
+            showToast(error.message || '创建项目失败', true);
         }
     }
 
@@ -836,7 +1246,22 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        const createProjectForm = document.getElementById('create-project-form');
+        if (createProjectForm) {
+            createProjectForm.addEventListener('submit', submitCreateProjectForm);
+        }
+
+        const createProjectModal = document.getElementById('create-project-modal');
+        if (createProjectModal) {
+            createProjectModal.addEventListener('click', (event) => {
+                if (event.target === createProjectModal) {
+                    closeCreateProjectModal();
+                }
+            });
+        }
+
         loadDashboardMemberCount();
+        updateCurrentPmField();
         updateGodModeBanner();
         bindProjectContextMenu();
     });

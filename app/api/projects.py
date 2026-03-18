@@ -15,13 +15,6 @@ from app.api.scoring import _calc_module_summary
 
 router = APIRouter(prefix="/projects", tags=["项目管理"])
 
-DEFAULT_SCORING_DIMENSIONS = [
-    {"name": "难度", "weight": 0.25},
-    {"name": "时长", "weight": 0.25},
-    {"name": "枯燥度", "weight": 0.25},
-    {"name": "强度", "weight": 0.25},
-]
-
 
 def _ensure_project_manager_or_god(project: models.Project, current_member_id: int, detail: str) -> None:
     if current_member_id == 0:
@@ -31,19 +24,23 @@ def _ensure_project_manager_or_god(project: models.Project, current_member_id: i
 
 
 def _resolve_scoring_dimensions(project_payload: schemas.ProjectCreate) -> List[dict]:
-    requested_dimensions = project_payload.scoring_dimensions or []
+    requested_dimensions = project_payload.scoring_dimensions
     if not requested_dimensions:
-        return [dict(item) for item in DEFAULT_SCORING_DIMENSIONS]
+        raise HTTPException(status_code=400, detail="至少需要设置一个评分维度")
 
     total_weight = sum(float(item.weight) for item in requested_dimensions)
     if abs(total_weight - 1.0) > 0.01:
         raise HTTPException(status_code=400, detail=f"评分维度权重之和必须为 1.0，当前为 {total_weight:.4f}")
 
     normalized_dimensions = []
+    used_names = set()
     for item in requested_dimensions:
         name = (item.name or "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="评分维度名称不能为空")
+        if name in used_names:
+            raise HTTPException(status_code=400, detail=f"评分维度名称不能重复：{name}")
+        used_names.add(name)
         normalized_dimensions.append({"name": name, "weight": float(item.weight)})
     return normalized_dimensions
 
@@ -67,7 +64,6 @@ def create_project(project: schemas.ProjectCreate, created_by_member_id: int, db
         name=project.name, 
         description=project.description, 
         created_by=created_by_member_id,
-        use_custom_dimensions=True,
     )
     db.add(db_project)
     
@@ -286,39 +282,6 @@ def set_assessment_period(project_id: int, period: schemas.AssessmentPeriodSet, 
     db.commit()
     db.refresh(project)
     return project
-
-
-@router.put("/{project_id}/weights", response_model=schemas.Project)
-def set_project_weights(project_id: int, weights: schemas.ProjectWeightsUpdate, current_member_id: int, db: Session = Depends(get_db)):
-    """
-    **业务逻辑说明**：
-    管理员为项目设置四维评分权重。
-    权重对所有项目组成员可见，用于综合分数的加权计算。
-    建议在开放评分期之前完成此设置。
-    """
-    project = db.query(models.Project).filter(models.Project.id == project_id).first()
-    if project is None:
-        raise HTTPException(status_code=404, detail="未找到该项目")
-
-    _ensure_project_manager_or_god(project, current_member_id, "只有项目创建者才能修改评分权重")
-
-    # 校验权重之和是否为 1.0（允许浮点误差 ±0.01）
-    total_weight = weights.weight_difficulty + weights.weight_hours + weights.weight_boredom + weights.weight_intensity
-    if abs(total_weight - 1.0) > 0.01:
-        raise HTTPException(status_code=400, detail=f"四个权重之和必须为 1.0，当前为 {total_weight:.4f}")
-
-    for field, value in {
-        "weight_difficulty": weights.weight_difficulty,
-        "weight_hours": weights.weight_hours,
-        "weight_boredom": weights.weight_boredom,
-        "weight_intensity": weights.weight_intensity,
-    }.items():
-        setattr(project, field, value)
-    db.commit()
-    db.refresh(project)
-    return project
-
-
 @router.get("/my/{member_id}")
 def get_my_projects(member_id: int, db: Session = Depends(get_db)):
     """

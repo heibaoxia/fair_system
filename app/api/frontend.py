@@ -41,23 +41,15 @@ def _build_scoring_dimensions_payload(project: Project, db: Session):
         models.ScoringDimension.project_id == project.id
     ).order_by(models.ScoringDimension.sort_order.asc(), models.ScoringDimension.id.asc()).all()
 
-    if dimensions:
-        return [
-            {
-                "id": dimension.id,
-                "name": dimension.name,
-                "weight": _as_float(dimension.weight, 0.0),
-                "sort_order": _as_int(dimension.sort_order, 0),
-                "max_score": _as_float(dimension.max_score, 10.0),
-            }
-            for dimension in dimensions
-        ]
-
     return [
-        {"id": None, "name": "难度", "weight": _as_float(getattr(project, "weight_difficulty", 0.25), 0.25), "sort_order": 0, "max_score": 10.0, "legacy_field": "difficulty_score"},
-        {"id": None, "name": "时长", "weight": _as_float(getattr(project, "weight_hours", 0.25), 0.25), "sort_order": 1, "max_score": 10.0, "legacy_field": "estimated_hours"},
-        {"id": None, "name": "枯燥度", "weight": _as_float(getattr(project, "weight_boredom", 0.25), 0.25), "sort_order": 2, "max_score": 10.0, "legacy_field": "boredom_score"},
-        {"id": None, "name": "强度", "weight": _as_float(getattr(project, "weight_intensity", 0.25), 0.25), "sort_order": 3, "max_score": 10.0, "legacy_field": "intensity_score"},
+        {
+            "id": dimension.id,
+            "name": dimension.name,
+            "weight": _as_float(dimension.weight, 0.0),
+            "sort_order": _as_int(dimension.sort_order, 0),
+            "max_score": _as_float(dimension.max_score, 10.0),
+        }
+        for dimension in dimensions
     ]
 
 
@@ -80,14 +72,7 @@ def _build_member_assessment_lookup(project: Project, member_id: int, db: Sessio
         }
         review_scores = []
         for dimension in dimensions:
-            legacy_field = dimension.get("legacy_field")
-            if dimension.get("id") is not None:
-                score_value = dimension_score_map.get(dimension["id"], 0.0)
-            elif isinstance(legacy_field, str):
-                legacy_raw_value = getattr(assessment, legacy_field, 0.0)
-                score_value = round(float(legacy_raw_value or 0.0), 1)
-            else:
-                score_value = 0.0
+            score_value = dimension_score_map.get(dimension["id"], 0.0)
             review_scores.append({
                 "name": dimension["name"],
                 "score": score_value,

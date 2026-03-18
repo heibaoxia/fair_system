@@ -50,7 +50,6 @@ def test_create_project_with_custom_dimensions():
         project = projects.create_project(payload, created_by_member_id=owner.id, db=db)
         db.refresh(project)
 
-        assert project.use_custom_dimensions is True
         assert [item.name for item in project.scoring_dimensions] == ["难度", "创意度", "沟通成本"]
         assert [item.weight for item in project.scoring_dimensions] == [0.5, 0.3, 0.2]
     finally:
@@ -67,7 +66,6 @@ def test_submit_assessment_with_custom_dimension_scores():
             name="Assessment Project",
             description="",
             created_by=owner.id,
-            use_custom_dimensions=True,
             assessment_start=datetime.now() - timedelta(hours=1),
             assessment_end=datetime.now() + timedelta(hours=1),
         )
@@ -117,7 +115,6 @@ def test_custom_dimension_weighted_summary():
             name="Summary Project",
             description="",
             created_by=owner.id,
-            use_custom_dimensions=True,
         )
         db.add(project)
         db.flush()

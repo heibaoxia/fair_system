@@ -338,8 +338,8 @@
         const row = document.createElement('div');
         row.className = 'dimension-row';
 
-        const fieldKey = dimension.legacy_field || `dimension-${dimension.id}`;
         const defaultValue = module.assessment?.review_scores?.find((item) => item.name === dimension.name)?.score ?? 5;
+        const maxScore = Number(dimension.max_score || 10).toFixed(1);
 
         row.innerHTML = `
             <div class="dimension-row-head">
@@ -347,8 +347,8 @@
                 <span>权重 ${(Number(dimension.weight || 0) * 100).toFixed(0)}%</span>
             </div>
             <div class="dimension-inputs">
-                <input type="range" min="0" max="10" step="0.1" value="${Number(defaultValue).toFixed(1)}" data-role="range" data-field-key="${fieldKey}">
-                <input type="number" min="0" max="10" step="0.1" value="${Number(defaultValue).toFixed(1)}" data-role="number" data-field-key="${fieldKey}">
+                <input type="range" min="0" max="${maxScore}" step="0.1" value="${Number(defaultValue).toFixed(1)}" data-role="range" data-dimension-id="${dimension.id}">
+                <input type="number" min="0" max="${maxScore}" step="0.1" value="${Number(defaultValue).toFixed(1)}" data-role="number" data-dimension-id="${dimension.id}">
             </div>
         `;
 
@@ -419,18 +419,13 @@
 
         const form = document.getElementById('scoring-form');
         scoringDimensions.forEach((dimension) => {
-            const fieldKey = dimension.legacy_field || `dimension-${dimension.id}`;
-            const input = form.querySelector(`input[data-role="number"][data-field-key="${fieldKey}"]`);
+            const input = form.querySelector(`input[data-role="number"][data-dimension-id="${dimension.id}"]`);
             const score = Number(input.value);
             if (Number.isNaN(score) || score < 0 || score > 10) {
                 throw new Error(`${dimension.name} 的分数必须在 0 到 10 之间`);
             }
 
-            if (dimension.id !== null && dimension.id !== undefined) {
-                payload.dimension_scores.push({ dimension_id: dimension.id, score });
-            } else if (dimension.legacy_field) {
-                payload[dimension.legacy_field] = score;
-            }
+            payload.dimension_scores.push({ dimension_id: dimension.id, score });
         });
 
         return payload;
@@ -484,11 +479,8 @@
                 module.assessment = {
                     assessment_id: data.id,
                     review_scores: scoringDimensions.map((dimension) => {
-                        if (dimension.id !== null && dimension.id !== undefined) {
-                            const matched = (payload.dimension_scores || []).find((item) => item.dimension_id === dimension.id);
-                            return { name: dimension.name, score: matched ? matched.score : 0, weight: dimension.weight };
-                        }
-                        return { name: dimension.name, score: payload[dimension.legacy_field] || 0, weight: dimension.weight };
+                        const matched = (payload.dimension_scores || []).find((item) => item.dimension_id === dimension.id);
+                        return { name: dimension.name, score: matched ? matched.score : 0, weight: dimension.weight };
                     })
                 };
 

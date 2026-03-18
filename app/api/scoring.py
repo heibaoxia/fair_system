@@ -5,7 +5,7 @@ Fair-System 综合分计算 API
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List
 
 from app import models
 from app.api.dependencies import get_db
@@ -19,38 +19,12 @@ def _get_project_dimensions(project: models.Project, db: Session) -> List[models
     ).order_by(models.ScoringDimension.sort_order.asc(), models.ScoringDimension.id.asc()).all()
 
 
-def _build_legacy_empty_summary(module: models.Module, project: models.Project) -> dict:
-    empty_weight_difficulty = float(getattr(project, "weight_difficulty", 0.25) or 0.25)
-    empty_weight_hours = float(getattr(project, "weight_hours", 0.25) or 0.25)
-    empty_weight_boredom = float(getattr(project, "weight_boredom", 0.25) or 0.25)
-    empty_weight_intensity = float(getattr(project, "weight_intensity", 0.25) or 0.25)
-    return {
-        "module_id": module.id,
-        "module_name": module.name,
-        "assessment_count": 0,
-        "avg_difficulty": 0,
-        "avg_estimated_hours": 0,
-        "avg_boredom": 0,
-        "avg_intensity": 0,
-        "composite_score": 0,
-        "weights_used": {
-            "difficulty": empty_weight_difficulty,
-            "hours": empty_weight_hours,
-            "boredom": empty_weight_boredom,
-            "intensity": empty_weight_intensity,
-        },
-        "breakdown": {
-            "difficulty_component": 0,
-            "hours_component": 0,
-            "boredom_component": 0,
-            "intensity_component": 0,
-        }
-    }
-
-
-def _build_custom_summary(module: models.Module, project: models.Project, assessments: List[models.ModuleAssessment], db: Session) -> dict:
+def _build_dynamic_summary(module: models.Module, project: models.Project, assessments: List[models.ModuleAssessment], db: Session) -> dict:
     dimensions = _get_project_dimensions(project, db)
     weight_map = {dimension.name: float(dimension.weight or 0.0) for dimension in dimensions}
+
+    if not dimensions:
+        raise HTTPException(status_code=400, detail="项目缺少评分维度配置")
 
     if not assessments:
         return {
@@ -113,53 +87,7 @@ def _calc_module_summary(module: models.Module, project: models.Project, db: Ses
     assessments = db.query(models.ModuleAssessment).filter(
         models.ModuleAssessment.module_id == module.id
     ).all()
-
-    if getattr(project, "use_custom_dimensions", False):
-        return _build_custom_summary(module, project, assessments, db)
-
-    if not assessments:
-        return _build_legacy_empty_summary(module, project)
-
-    weight_difficulty = float(getattr(project, "weight_difficulty", 0.25) or 0.25)
-    weight_hours = float(getattr(project, "weight_hours", 0.25) or 0.25)
-    weight_boredom = float(getattr(project, "weight_boredom", 0.25) or 0.25)
-    weight_intensity = float(getattr(project, "weight_intensity", 0.25) or 0.25)
-
-    count = len(assessments)
-    avg_d = sum(float(getattr(a, "difficulty_score", 0) or 0) for a in assessments) / count
-    avg_h = sum(float(getattr(a, "estimated_hours", 0.0) or 0.0) for a in assessments) / count
-    avg_b = sum(float(getattr(a, "boredom_score", 0) or 0) for a in assessments) / count
-    avg_i = sum(float(getattr(a, "intensity_score", 0) or 0) for a in assessments) / count
-
-    # 加权综合分
-    d_comp = avg_d * weight_difficulty
-    h_comp = avg_h * weight_hours
-    b_comp = avg_b * weight_boredom
-    i_comp = avg_i * weight_intensity
-    composite = d_comp + h_comp + b_comp + i_comp
-
-    return {
-        "module_id": module.id,
-        "module_name": module.name,
-        "assessment_count": count,
-        "avg_difficulty": round(float(avg_d), 2),
-        "avg_estimated_hours": round(float(avg_h), 2),
-        "avg_boredom": round(float(avg_b), 2),
-        "avg_intensity": round(float(avg_i), 2),
-        "composite_score": round(float(composite), 2),
-        "weights_used": {
-            "difficulty": weight_difficulty,
-            "hours": weight_hours,
-            "boredom": weight_boredom,
-            "intensity": weight_intensity,
-        },
-        "breakdown": {
-            "difficulty_component": round(float(d_comp), 4),
-            "hours_component": round(float(h_comp), 4),
-            "boredom_component": round(float(b_comp), 4),
-            "intensity_component": round(float(i_comp), 4),
-        }
-    }
+    return _build_dynamic_summary(module, project, assessments, db)
 
 
 def build_project_summary_payload(project: models.Project, modules: List[models.Module], db: Session) -> dict:
@@ -176,19 +104,11 @@ def build_project_summary_payload(project: models.Project, modules: List[models.
     return {
         "project_id": project.id,
         "project_name": project.name,
-        "weights": (
-            {dimension.name: float(dimension.weight or 0.0) for dimension in _get_project_dimensions(project, db)}
-            if getattr(project, "use_custom_dimensions", False)
-            else {
-                "difficulty": float(getattr(project, "weight_difficulty", 0.25) or 0.25),
-                "hours": float(getattr(project, "weight_hours", 0.25) or 0.25),
-                "boredom": float(getattr(project, "weight_boredom", 0.25) or 0.25),
-                "intensity": float(getattr(project, "weight_intensity", 0.25) or 0.25),
-            }
-        ),
+        "weights": {dimension.name: float(dimension.weight or 0.0) for dimension in _get_project_dimensions(project, db)},
         "is_summarized": is_summarized,
         "project_composite_score": round(float(project_composite_score), 2),
         "project_estimated_hours": round(float(project_estimated_hours), 2),
+        "scored_module_count": len(effective_modules),
         "modules": module_summaries,
     }
 

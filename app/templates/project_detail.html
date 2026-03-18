@@ -640,22 +640,19 @@
                             <h2 class="modal-title">画板区域</h2>
                             <p id="project-canvas-hint">模块卡片可自由拖动排布，也支持成员卡片拖到模块上进行快速分配。</p>
                             <div class="weights-panel" id="project-score-weights">
+                                {% if project.scoring_dimensions %}
+                                {% for dimension in project.scoring_dimensions %}
                                 <div class="weight-pill">
-                                    <strong>难度权重</strong>
-                                    <span>{{ '%.2f'|format(project.weight_difficulty or 0.25) }}</span>
+                                    <strong>{{ dimension.name }}</strong>
+                                    <span>权重 {{ '%.0f'|format((dimension.weight or 0) * 100) }}%</span>
                                 </div>
+                                {% endfor %}
+                                {% else %}
                                 <div class="weight-pill">
-                                    <strong>时长权重</strong>
-                                    <span>{{ '%.2f'|format(project.weight_hours or 0.25) }}</span>
+                                    <strong>未设置评分维度</strong>
+                                    <span>请返回工作台重新创建项目。</span>
                                 </div>
-                                <div class="weight-pill">
-                                    <strong>枯燥权重</strong>
-                                    <span>{{ '%.2f'|format(project.weight_boredom or 0.25) }}</span>
-                                </div>
-                                <div class="weight-pill">
-                                    <strong>强度权重</strong>
-                                    <span>{{ '%.2f'|format(project.weight_intensity or 0.25) }}</span>
-                                </div>
+                                {% endif %}
                             </div>
                         </div>
                         <span class="badge badge-secondary">{{ modules|length }} 个模块</span>
@@ -926,12 +923,6 @@
             button.dataset.moduleName || `模块 #${button.dataset.moduleId}`
         ])
     );
-    const projectScoreWeights = {
-        difficulty: {{ '%.2f'|format(project.weight_difficulty or 0.25) }},
-        hours: {{ '%.2f'|format(project.weight_hours or 0.25) }},
-        boredom: {{ '%.2f'|format(project.weight_boredom or 0.25) }},
-        intensity: {{ '%.2f'|format(project.weight_intensity or 0.25) }}
-    };
     let batchAssignmentPreview = null;
     let batchAssignmentDraftAssignments = {};
     let isBatchAdjustmentMode = false;
@@ -1636,25 +1627,31 @@
             breakdown.innerHTML = `
                 <div class="score-breakdown-item">
                     <strong>暂无评分</strong>
-                    <span>模块收到评估后会显示综合分与四维拆解。</span>
+                    <span>模块收到评估后会显示综合分与各维度拆解。</span>
                 </div>
             `;
             return;
         }
 
-        const weightMap = summary.weights_used || projectScoreWeights;
+        const dimensionRows = Array.isArray(summary.dimension_averages) ? summary.dimension_averages : [];
         scoreChip.dataset.empty = 'false';
         scoreChip.textContent = formatScore(summary.composite_score);
         scoreCount.textContent = `${summary.assessment_count} 人已评分`;
-        breakdown.innerHTML = [
-            ['难度', summary.avg_difficulty, weightMap.difficulty],
-            ['时长', summary.avg_estimated_hours, weightMap.hours],
-            ['枯燥', summary.avg_boredom, weightMap.boredom],
-            ['强度', summary.avg_intensity, weightMap.intensity]
-        ].map(([label, average, weight]) => `
+
+        if (!dimensionRows.length) {
+            breakdown.innerHTML = `
+                <div class="score-breakdown-item">
+                    <strong>暂无维度拆解</strong>
+                    <span>当前模块还没有形成可展示的维度平均分。</span>
+                </div>
+            `;
+            return;
+        }
+
+        breakdown.innerHTML = summary.dimension_averages.map((item) => `
             <div class="score-breakdown-item">
-                <strong>${label}</strong>
-                <span>平均值 ${Number(average).toFixed(2)} / 权重 ${Number(weight).toFixed(2)}</span>
+                <strong>${item.name}</strong>
+                <span>平均分 ${Number(item.avg_score || 0).toFixed(2)} / 权重 ${Number(item.weight || 0).toFixed(2)} / 贡献 ${Number(item.component || 0).toFixed(2)}</span>
             </div>
         `).join('');
     }

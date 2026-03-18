@@ -34,7 +34,7 @@ class CustomScoringDimensionsTests(unittest.TestCase):
         Base.metadata.drop_all(bind=self.engine)
         self.engine.dispose()
 
-    def test_create_project_without_dimensions_creates_default_dimension_records(self):
+    def test_create_project_without_dimensions_is_rejected(self):
         payload = schemas.ProjectCreate(
             name="Default Dimension Project",
             description="",
@@ -42,20 +42,17 @@ class CustomScoringDimensionsTests(unittest.TestCase):
             dependencies=[],
         )
 
-        project = projects.create_project(payload, created_by_member_id=self.owner.id, db=self.db)
+        with self.assertRaises(HTTPException) as exc_info:
+            projects.create_project(payload, created_by_member_id=self.owner.id, db=self.db)
 
-        self.db.refresh(project)
-        dimension_names = [item.name for item in project.scoring_dimensions]
-        self.assertTrue(project.use_custom_dimensions)
-        self.assertEqual(dimension_names, ["难度", "时长", "枯燥度", "强度"])
-        self.assertEqual(sum(item.weight for item in project.scoring_dimensions), 1.0)
+        self.assertEqual(exc_info.exception.status_code, 400)
+        self.assertEqual(exc_info.exception.detail, "至少需要设置一个评分维度")
 
     def test_create_assessment_rejects_dimension_from_other_project(self):
         project = models.Project(
             name="Scored Project",
             description="",
             created_by=self.owner.id,
-            use_custom_dimensions=True,
             assessment_start=datetime.now() - timedelta(hours=1),
             assessment_end=datetime.now() + timedelta(hours=1),
         )
@@ -73,7 +70,6 @@ class CustomScoringDimensionsTests(unittest.TestCase):
             name="Other Project",
             description="",
             created_by=self.owner.id,
-            use_custom_dimensions=True,
         )
         self.db.add(other_project)
         self.db.flush()
@@ -93,12 +89,43 @@ class CustomScoringDimensionsTests(unittest.TestCase):
         self.assertEqual(exc_info.exception.status_code, 400)
         self.assertEqual(exc_info.exception.detail, "存在不属于当前项目的评分维度")
 
+    def test_create_assessment_rejects_missing_project_dimensions(self):
+        project = models.Project(
+            name="Scored Project",
+            description="",
+            created_by=self.owner.id,
+            assessment_start=datetime.now() - timedelta(hours=1),
+            assessment_end=datetime.now() + timedelta(hours=1),
+        )
+        project.members.extend([self.owner, self.member])
+        self.db.add(project)
+        self.db.flush()
+
+        module = models.Module(name="Module A", project_id=project.id)
+        self.db.add(module)
+
+        dimension_a = models.ScoringDimension(project_id=project.id, name="难度", weight=0.6, sort_order=0)
+        dimension_b = models.ScoringDimension(project_id=project.id, name="创意度", weight=0.4, sort_order=1)
+        self.db.add_all([dimension_a, dimension_b])
+        self.db.commit()
+
+        payload = schemas.AssessmentCreate(
+            member_id=self.member.id,
+            module_id=module.id,
+            dimension_scores=[schemas.DimensionScoreCreate(dimension_id=dimension_a.id, score=8.5)],
+        )
+
+        with self.assertRaises(HTTPException) as exc_info:
+            assessments.create_assessment(payload, db=self.db)
+
+        self.assertEqual(exc_info.exception.status_code, 400)
+        self.assertEqual(exc_info.exception.detail, "必须为项目的每个评分维度提交一次分数")
+
     def test_custom_dimension_summary_uses_dynamic_weighted_scores(self):
         project = models.Project(
             name="Dynamic Summary Project",
             description="",
             created_by=self.owner.id,
-            use_custom_dimensions=True,
         )
         self.db.add(project)
         self.db.flush()

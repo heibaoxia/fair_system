@@ -15,9 +15,9 @@ def build_session():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    testing_session_local = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base.metadata.create_all(bind=engine)
-    return engine, TestingSessionLocal()
+    return engine, testing_session_local()
 
 
 def seed_project(db, *, assessment_end):
@@ -38,35 +38,47 @@ def seed_project(db, *, assessment_end):
     db.add(project)
     db.flush()
 
+    dimensions = [
+        models.ScoringDimension(project_id=project.id, name="难度", weight=0.4, sort_order=0),
+        models.ScoringDimension(project_id=project.id, name="时长", weight=0.3, sort_order=1),
+        models.ScoringDimension(project_id=project.id, name="协作成本", weight=0.3, sort_order=2),
+    ]
+    db.add_all(dimensions)
+    db.flush()
+
     module_a = models.Module(name="模块A", project_id=project.id, status="待分配")
     module_b = models.Module(name="模块B", project_id=project.id, status="待分配")
     db.add_all([module_a, module_b])
     db.commit()
-    return project, owner, member_a, member_b, module_a, module_b
+    return project, owner, member_a, member_b, module_a, module_b, dimensions
 
 
-def add_full_assessments(db, members, modules):
+def add_full_assessments(db, members, modules, dimensions):
     for member in members:
         for module in modules:
-            db.add(models.ModuleAssessment(
+            assessment = models.ModuleAssessment(
                 member_id=member.id,
                 module_id=module.id,
-                difficulty_score=6.0,
-                estimated_hours=4.0,
-                boredom_score=5.0,
-                intensity_score=7.0,
-            ))
+            )
+            db.add(assessment)
+            db.flush()
+            for index, dimension in enumerate(dimensions):
+                db.add(models.DimensionScore(
+                    assessment_id=assessment.id,
+                    dimension_id=dimension.id,
+                    score=6.0 + index,
+                ))
     db.commit()
 
 
 def test_effective_completion_true_after_everyone_finishes_assessments():
     engine, db = build_session()
     try:
-        project, owner, member_a, member_b, module_a, module_b = seed_project(
+        project, owner, member_a, member_b, module_a, module_b, dimensions = seed_project(
             db,
             assessment_end=datetime.now() + timedelta(hours=4),
         )
-        add_full_assessments(db, [owner, member_a, member_b], [module_a, module_b])
+        add_full_assessments(db, [owner, member_a, member_b], [module_a, module_b], dimensions)
 
         progress = get_assessment_progress(project.id, db=db)
 
@@ -83,11 +95,11 @@ def test_effective_completion_true_after_everyone_finishes_assessments():
 def test_effective_completion_true_before_deadline_when_everyone_already_finished():
     engine, db = build_session()
     try:
-        project, owner, member_a, member_b, module_a, module_b = seed_project(
+        project, owner, member_a, member_b, module_a, module_b, dimensions = seed_project(
             db,
             assessment_end=datetime.now() + timedelta(minutes=30),
         )
-        add_full_assessments(db, [owner, member_a, member_b], [module_a, module_b])
+        add_full_assessments(db, [owner, member_a, member_b], [module_a, module_b], dimensions)
 
         progress = get_assessment_progress(project.id, db=db)
 
