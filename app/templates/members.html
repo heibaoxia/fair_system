@@ -370,11 +370,6 @@
             closeMemberModal();
             loadMembers(); // 重新加载列表
 
-            // 重要：刷新左下角的全局角色选择器 (由 base.html 提供)
-            if (typeof loadGlobalIdentities === 'function') {
-                loadGlobalIdentities();
-            }
-
         } catch (error) {
             console.error('提交失败:', error);
             showToast(error.message, true);
@@ -406,11 +401,6 @@
             showToast('已成功删除该成员');
             closeDeleteModal();
             loadMembers(); // 重新加载列表
-
-            // 重要：刷新左下角的全局角色选择器 (由 base.html 提供)
-            if (typeof loadGlobalIdentities === 'function') {
-                loadGlobalIdentities();
-            }
 
         } catch (error) {
             console.error('删除失败:', error);

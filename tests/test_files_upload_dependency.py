@@ -1,6 +1,7 @@
 import io
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException, UploadFile
@@ -59,6 +60,10 @@ class UploadModuleFileDependencyValidationTests(unittest.TestCase):
         self.db.commit()
 
         self.owner_id = owner.id
+        self.owner_context = SimpleNamespace(
+            account=SimpleNamespace(is_super_account=False),
+            acting_member=owner,
+        )
         self.preceding_module_id = preceding_module.id
         self.dependent_module_id = dependent_module.id
 
@@ -75,8 +80,8 @@ class UploadModuleFileDependencyValidationTests(unittest.TestCase):
                 with self.assertRaises(HTTPException) as exc_info:
                     files.upload_module_file(
                         module_id=self.dependent_module_id,
-                        uploaded_by=self.owner_id,
                         file=upload,
+                        context=self.owner_context,
                         db=self.db,
                     )
 
@@ -105,7 +110,7 @@ class UploadModuleFileDependencyValidationTests(unittest.TestCase):
         result = files._review_file(
             file_id=pending_file.id,
             action="approve",
-            current_member_id=self.owner_id,
+            context=self.owner_context,
             db=self.db,
         )
 

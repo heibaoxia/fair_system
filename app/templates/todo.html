@@ -227,14 +227,12 @@
                             </div>
 
                             <div class="assessment-item-actions">
-                                <a class="btn btn-primary" href="/scoring/{{ item.project_id }}?member_id={{ member_id }}">立即打分</a>
+                                <a class="btn btn-primary" href="/scoring/{{ item.project_id }}">立即打分</a>
                             </div>
                         </article>
                         {% endfor %}
-                    {% elif member_id %}
-                    <div class="todo-empty">当前没有需要你处理的待评分模块。</div>
                     {% else %}
-                    <div class="todo-empty">请先在左下角切换当前视角成员，系统会自动加载你的待评分列表。</div>
+                    <div class="todo-empty">当前没有需要你处理的待评分模块。</div>
                     {% endif %}
                 </div>
             </div>
@@ -264,10 +262,8 @@
                             </div>
                         </article>
                         {% endfor %}
-                    {% elif member_id %}
-                    <div class="todo-empty">当前没有你负责且正在开发中的模块。</div>
                     {% else %}
-                    <div class="todo-empty">请先在左下角切换当前视角成员，系统会自动加载你的开发中模块。</div>
+                    <div class="todo-empty">当前没有你负责且正在开发中的模块。</div>
                     {% endif %}
                 </div>
             </div>
@@ -308,10 +304,8 @@
                             </div>
                         </article>
                         {% endfor %}
-                    {% elif member_id %}
-                    <div class="todo-empty">当前没有待处理的模块交换请求。</div>
                     {% else %}
-                    <div class="todo-empty">请先在左下角切换当前视角成员，系统会自动加载你的交换请求。</div>
+                    <div class="todo-empty">当前没有待处理的模块交换请求。</div>
                     {% endif %}
                 </div>
             </div>
@@ -345,16 +339,35 @@
 
 {% block extra_js %}
 <script>
+    function hasBusinessIdentity() {
+        try {
+            const context = sessionContext && typeof sessionContext === 'object' ? sessionContext : null;
+            const actingMemberId = Number(context && context.acting_member ? context.acting_member.id : 0);
+            return Number.isInteger(actingMemberId) && actingMemberId > 0;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function sanitizeIdentityQueryParams() {
+        const url = new URL(window.location.href);
+        if (!url.search) {
+            return;
+        }
+
+        const cleanUrl = `${url.pathname}${url.hash || ''}`;
+        window.history.replaceState({}, '', cleanUrl);
+    }
+
     async function resolveSwapRequest(swapId, action) {
-        const currentMemberId = getCurrentMemberId();
-        if (!currentMemberId) {
+        if (!hasBusinessIdentity()) {
             alert('请先切换当前视角成员');
             return;
         }
 
         const actionText = action === 'accept' ? '接受' : '拒绝';
         try {
-            const response = await fetch(`/swaps/${swapId}/${action}?member_id=${currentMemberId}`, {
+            const response = await fetch(`/swaps/${swapId}/${action}`, {
                 method: 'POST'
             });
             const data = await response.json();
@@ -369,14 +382,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        const currentMemberId = getCurrentMemberId();
-        const url = new URL(window.location.href);
-        const memberId = url.searchParams.get('member_id');
-
-        if (currentMemberId && memberId !== String(currentMemberId)) {
-            url.searchParams.set('member_id', currentMemberId);
-            window.location.replace(url.toString());
-        }
+        sanitizeIdentityQueryParams();
     });
 </script>
 {% endblock %}

@@ -14,12 +14,26 @@ FastAPI 挂载主文件。负责组装全部 API 路由（包括 projects, membe
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
-from app.database import Base, engine
-from app import models
+from app.database import engine
+from app.services.schema_bootstrap import bootstrap_schema
+from app.api import auth
 
 # 引入我们在 api 文件夹里写好的各种专门的处理路由！
-from app.api import members, projects, assessments, assignments, files, frontend, modules, project_dependencies, scoring, notifications, swaps
+from app.api import (
+    assessments,
+    assignments,
+    files,
+    frontend,
+    members,
+    modules,
+    notifications,
+    project_dependencies,
+    project_invites,
+    projects,
+    scoring,
+    social,
+    swaps,
+)
 
 # 1. 创建 FastAPI 实例（建造大门）
 app = FastAPI(
@@ -45,18 +59,14 @@ app.add_middleware(
 # 所以这里我们需要告诉它："只要是以 /static 开头的链接，你就去我们真实的 app/static 硬盘文件夹里找！"
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-Base.metadata.create_all(bind=engine)
-
-with engine.begin() as connection:
-    member_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(members)"))}
-    if "total_earnings" not in member_columns:
-        connection.execute(text("ALTER TABLE members ADD COLUMN total_earnings FLOAT DEFAULT 0.0"))
-
+bootstrap_schema(engine)
 
 # 3. 将各个业务模块的路由“挂载”到主程序上！
 # 相当于把这些写好的办公室告诉总前台门卫
+app.include_router(auth.router)
 app.include_router(members.router)
 app.include_router(projects.router)
+app.include_router(project_invites.router)
 app.include_router(modules.router)
 app.include_router(project_dependencies.router)
 app.include_router(assessments.router)
@@ -65,6 +75,7 @@ app.include_router(swaps.router)
 app.include_router(scoring.router)
 app.include_router(notifications.router)
 app.include_router(files.router)
+app.include_router(social.router)
 app.include_router(frontend.router)
 
 # 要想运行它进行测试，在终端输入：

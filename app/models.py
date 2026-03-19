@@ -5,7 +5,20 @@
 我们只需要在这个文件里写 Python 类 (Class)，SQLAlchemy 就会在运行初始化脚本时，自动帮我们在数据库里把这些相关的表格建立起来。
 """
 
-from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, Float, Table
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Table,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -17,7 +30,8 @@ project_members_association = Table(
     "project_members",
     Base.metadata,
     Column("project_id", Integer, ForeignKey("projects.id")),
-    Column("member_id", Integer, ForeignKey("members.id"))
+    Column("member_id", Integer, ForeignKey("members.id")),
+    UniqueConstraint("project_id", "member_id", name="uq_project_members_pair"),
 )
 
 # ==========================================
@@ -26,11 +40,19 @@ project_members_association = Table(
 # ==========================================
 class Member(Base):
     __tablename__ = "members" # 这个就是真正在 SQLite 数据库里的表名字
+    __table_args__ = (
+        CheckConstraint("gender IN ('male', 'female', 'private')", name="ck_members_gender"),
+    )
 
     id = Column(Integer, primary_key=True, index=True) # 每个成员的唯一编号 (1, 2, 3...)
     name = Column(String, index=True) # 成员的名字
-    tel = Column(String, unique=True, index=True) # 手机号，加了 unique=True 代表手机号不能重复注册
+    tel = Column(String, unique=True, nullable=True, index=True) # 手机号，加了 unique=True 代表手机号不能重复注册
+    email = Column(String, unique=True, nullable=True, index=True) # 成员权威邮箱；为空时不能走自助注册
+    gender = Column(String, nullable=False, default="private", server_default="private")
+    public_email = Column(Boolean, nullable=False, default=False, server_default="0")
+    public_tel = Column(Boolean, nullable=False, default=False, server_default="0")
     is_active = Column(Boolean, default=True) # 账号是不是白名单/激活状态
+    is_virtual_identity = Column(Boolean, default=False) # 是否是虚拟身份（用于登录代理/占位身份）
 
     # [新增] 技能、可用时间和评价数据
     skills = Column(String, default="") # 成员的标签或技能描述，比如 "Python,前端设计,测试"
@@ -44,6 +66,129 @@ class Member(Base):
     # 你可以直接写 m.projects (获取他创建的所有项目), m.assessments (获取他做的所有打分)。
     projects = relationship("Project", back_populates="owner")
     assessments = relationship("ModuleAssessment", back_populates="member")
+    account = relationship("Account", back_populates="member", uselist=False)
+
+
+# ==========================================
+# 1.5 认证账号表 (Account)
+# 正式登录账号，与真实成员一对一关联；超级账号可不绑定成员
+# ==========================================
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    login_id = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    email = Column(String, unique=True, nullable=True, index=True)
+    email_verified_at = Column(DateTime, nullable=True)
+    registration_status = Column(String, nullable=False, default="pending_verification")
+    is_super_account = Column(Boolean, default=False)
+    member_id = Column(Integer, ForeignKey("members.id"), unique=True, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    member = relationship("Member", back_populates="account")
+    sessions = relationship("AuthSession", back_populates="account", cascade="all, delete-orphan")
+    following_links = relationship(
+        "AccountFollow",
+        foreign_keys="AccountFollow.follower_account_id",
+        back_populates="follower_account",
+        cascade="all, delete-orphan",
+    )
+    follower_links = relationship(
+        "AccountFollow",
+        foreign_keys="AccountFollow.followed_account_id",
+        back_populates="followed_account",
+        cascade="all, delete-orphan",
+    )
+    email_verification_tokens = relationship(
+        "EmailVerificationToken",
+        back_populates="account",
+        cascade="all, delete-orphan",
+    )
+    sent_project_invites = relationship(
+        "ProjectInvite",
+        foreign_keys="ProjectInvite.inviter_account_id",
+        back_populates="inviter_account",
+    )
+    received_project_invites = relationship(
+        "ProjectInvite",
+        foreign_keys="ProjectInvite.invitee_account_id",
+        back_populates="invitee_account",
+    )
+
+
+# ==========================================
+# 1.52 账号关注关系表 (AccountFollow)
+# ==========================================
+class AccountFollow(Base):
+    __tablename__ = "account_follows"
+    __table_args__ = (
+        UniqueConstraint(
+            "follower_account_id",
+            "followed_account_id",
+            name="uq_account_follows_pair",
+        ),
+        CheckConstraint(
+            "follower_account_id <> followed_account_id",
+            name="ck_account_follows_not_self",
+        ),
+        Index("ix_account_follows_follower_account_id", "follower_account_id"),
+        Index("ix_account_follows_followed_account_id", "followed_account_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    follower_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    followed_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    follower_account = relationship(
+        "Account",
+        foreign_keys=[follower_account_id],
+        back_populates="following_links",
+    )
+    followed_account = relationship(
+        "Account",
+        foreign_keys=[followed_account_id],
+        back_populates="follower_links",
+    )
+
+
+# ==========================================
+# 1.55 邮箱验证令牌表 (EmailVerificationToken)
+# 注册邮箱验证只存 token hash，不直接存明文 token
+# ==========================================
+class EmailVerificationToken(Base):
+    __tablename__ = "email_verification_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    email = Column(String, nullable=False)
+    token_hash = Column(String, unique=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    consumed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    account = relationship("Account", back_populates="email_verification_tokens")
+
+
+# ==========================================
+# 1.6 认证会话表 (AuthSession)
+# 记录登录后的 session，以及当前代入的成员身份
+# ==========================================
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_token = Column(String, unique=True, nullable=False)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    acting_member_id = Column(Integer, ForeignKey("members.id"), nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    last_seen_at = Column(DateTime, default=datetime.now)
+
+    account = relationship("Account", back_populates="sessions")
+    acting_member = relationship("Member", foreign_keys=[acting_member_id])
 
 
 # ==========================================
@@ -77,6 +222,42 @@ class Project(Base):
     # 项目包含哪些参与成员
     members = relationship("Member", secondary=project_members_association, backref="joined_projects")
     scoring_dimensions = relationship("ScoringDimension", back_populates="project", cascade="all, delete-orphan", order_by="ScoringDimension.sort_order")
+    invites = relationship("ProjectInvite", back_populates="project", cascade="all, delete-orphan")
+
+
+class ProjectInvite(Base):
+    __tablename__ = "project_invites"
+    __table_args__ = (
+        Index("ix_project_invites_project_id", "project_id"),
+        Index("ix_project_invites_invitee_account_id", "invitee_account_id"),
+        Index(
+            "uq_project_invites_pending_pair",
+            "project_id",
+            "invitee_account_id",
+            unique=True,
+            sqlite_where=text("status = 'pending'"),
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    inviter_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    invitee_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    status = Column(String, nullable=False, default="pending")
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    resolved_at = Column(DateTime, nullable=True)
+
+    project = relationship("Project", back_populates="invites")
+    inviter_account = relationship(
+        "Account",
+        foreign_keys=[inviter_account_id],
+        back_populates="sent_project_invites",
+    )
+    invitee_account = relationship(
+        "Account",
+        foreign_keys=[invitee_account_id],
+        back_populates="received_project_invites",
+    )
 
 
 # ==========================================

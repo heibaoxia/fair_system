@@ -6,6 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import models, schemas
 from app.api import assessments, projects, scoring
+from app.api.dependencies import CurrentMemberContext
 from app.database import Base
 
 
@@ -30,6 +31,31 @@ def seed_members(db):
     return owner, scorer
 
 
+def build_context(member):
+    account = models.Account(
+        id=member.id,
+        login_id=f"user-{member.id}",
+        password_hash="hash",
+        member_id=member.id,
+        is_super_account=False,
+        is_active=True,
+    )
+    session = models.AuthSession(
+        session_token=f"session-{member.id}",
+        account_id=member.id,
+        acting_member_id=member.id,
+        expires_at=datetime.now() + timedelta(days=1),
+    )
+    session.account = account
+    session.acting_member = member
+    return CurrentMemberContext(
+        session=session,
+        account=account,
+        bound_member=member,
+        acting_member=member,
+    )
+
+
 def test_create_project_with_custom_dimensions():
     engine, db = build_session()
     try:
@@ -47,7 +73,7 @@ def test_create_project_with_custom_dimensions():
             ],
         )
 
-        project = projects.create_project(payload, created_by_member_id=owner.id, db=db)
+        project = projects.create_project(payload, db=db, context=build_context(owner))
         db.refresh(project)
 
         assert [item.name for item in project.scoring_dimensions] == ["难度", "创意度", "沟通成本"]

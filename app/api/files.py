@@ -16,7 +16,8 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app import models, schemas
-from app.api.dependencies import get_db
+from app.api.dependencies import CurrentMemberContext, get_current_member_context, get_db, require_project_pm
+from app.api.project_access import require_business_member
 from app.utils.dependency_checker import check_module_unlocked
 
 router = APIRouter(prefix="/files", tags=["文件成果管理"])
@@ -29,8 +30,8 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 @router.post("/upload/")
 def upload_module_file(
     module_id: int = Form(...), 
-    uploaded_by: int = Form(...),
     file: UploadFile = File(...),
+    context: CurrentMemberContext = Depends(get_current_member_context),
     db: Session = Depends(get_db)
 ):
     """
@@ -41,16 +42,14 @@ def upload_module_file(
     在这时我们就不能用 Pydantic 表格(JSON)接收了，必须全都改成 Form 表单接收模式。
     """
     
+    uploader = require_business_member(context, "请先选择当前业务身份后再上传文件。")
+
     # 1. 验证下这人和模块在不在
     module = db.query(models.Module).filter(models.Module.id == module_id).first()
     if not module:
         raise HTTPException(status_code=404, detail="模块找不到。")
-        
-    member = db.query(models.Member).filter(models.Member.id == uploaded_by).first()
-    if not member:
-        raise HTTPException(status_code=404, detail="上传的用户不存在。")
 
-    if module.assigned_to != uploaded_by:
+    if module.assigned_to != uploader.id:
         raise HTTPException(status_code=403, detail="只有该模块的负责人才能上传文件。")
 
     if module.status != "开发中":
@@ -89,7 +88,7 @@ def upload_module_file(
     # 4. 硬盘里有了，这时候我们要去数据库里记录一下！
     db_file = models.ModuleFile(
         module_id=module_id,
-        uploaded_by=uploaded_by,
+        uploaded_by=uploader.id,
         file_path=file_path,
         file_name=file.filename,
         status="Pending" # 刚上传，所以是“待审核”状态
@@ -109,7 +108,12 @@ def upload_module_file(
     }
 
 
-def _review_file(file_id: int, action: str, current_member_id: int, db: Session):
+def _review_file(
+    file_id: int,
+    action: str,
+    context: CurrentMemberContext,
+    db: Session,
+):
     """
     **业务逻辑说明**：
     项目经理的御用专属接口。当组员上传文件后，经理审查过关，调用它改状态。
@@ -128,8 +132,8 @@ def _review_file(file_id: int, action: str, current_member_id: int, db: Session)
     if not project:
         raise HTTPException(status_code=404, detail="找不到对应的项目。")
 
-    if project.created_by != current_member_id:
-        raise HTTPException(status_code=403, detail="只有项目经理才能审核交付。")
+    require_business_member(context, "请先选择当前业务身份后再审核。")
+    require_project_pm(int(project.id), context, db)
 
     normalized_action = action.lower()
 
@@ -167,16 +171,31 @@ def _review_file(file_id: int, action: str, current_member_id: int, db: Session)
 
 
 @router.put("/{file_id}/review")
-def review_file(file_id: int, action: str, current_member_id: int, db: Session = Depends(get_db)):
-    return _review_file(file_id=file_id, action=action, current_member_id=current_member_id, db=db)
+def review_file(
+    file_id: int,
+    action: str,
+    context: CurrentMemberContext = Depends(get_current_member_context),
+    db: Session = Depends(get_db),
+):
+    return _review_file(file_id=file_id, action=action, context=context, db=db)
 
 
 @router.post("/review/{file_id}")
-def review_file_legacy(file_id: int, action: str, current_member_id: int, db: Session = Depends(get_db)):
-    return _review_file(file_id=file_id, action=action, current_member_id=current_member_id, db=db)
+def review_file_legacy(
+    file_id: int,
+    action: str,
+    context: CurrentMemberContext = Depends(get_current_member_context),
+    db: Session = Depends(get_db),
+):
+    return _review_file(file_id=file_id, action=action, context=context, db=db)
 
 @router.post("/review_by_module/{module_id}")
-def review_file_by_module(module_id: int, action: str, current_member_id: int, db: Session = Depends(get_db)):
+def review_file_by_module(
+    module_id: int,
+    action: str,
+    context: CurrentMemberContext = Depends(get_current_member_context),
+    db: Session = Depends(get_db),
+):
     """
     **业务逻辑说明**：
     前端专用的快捷审核接口。项目经理在画板上点击“审核”时，不需要知道繁琐的 file_id，
@@ -192,4 +211,4 @@ def review_file_by_module(module_id: int, action: str, current_member_id: int, d
         raise HTTPException(status_code=404, detail="该模块当前没有待审核的文件。")
         
     # 复用前面的审核逻辑
-    return _review_file(file_id=int(db_file.id), action=action, current_member_id=current_member_id, db=db)
+    return _review_file(file_id=int(db_file.id), action=action, context=context, db=db)

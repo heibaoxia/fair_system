@@ -4,22 +4,69 @@ Fair-System 前端网页路由
 """
 
 from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote, urlsplit
 
-from app.api.dependencies import get_db
+from app.api.dependencies import (
+    SESSION_COOKIE_NAME,
+    CurrentMemberContext,
+    get_db,
+)
+from app.api.project_access import (
+    build_visible_projects_query,
+    ensure_project_visible,
+    require_business_member,
+)
 from app import models
 from app.models import Project, Member, Module
 from app.services.calculator import ProjectContributionCalculator
-from app.api.notifications import get_pending_assessments
+from app.api.notifications import get_pending_assessments_for_member
 from app.api.scoring import _calc_module_summary, build_project_summary_payload
 from app.api.swaps import get_pending_swap_requests
+from app.services.auth_service import load_session
 
 router = APIRouter(tags=["前端页面"])
 
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _build_login_redirect_url(request: Request) -> str:
+    next_path = request.url.path
+    if request.url.query:
+        next_path = f"{next_path}?{request.url.query}"
+    safe_next_path = _sanitize_next_path(next_path)
+    return f"/login?next={quote(safe_next_path, safe='')}"
+
+
+def _sanitize_next_path(next_path: str | None) -> str:
+    if not next_path:
+        return "/"
+
+    parsed = urlsplit(next_path)
+    if parsed.scheme or parsed.netloc:
+        return "/"
+    if not next_path.startswith("/") or next_path.startswith("//"):
+        return "/"
+    if "\\" in parsed.path:
+        return "/"
+    return next_path
+
+
+def _resolve_member_context(request: Request, db: Session) -> CurrentMemberContext | None:
+    session_token = request.cookies.get(SESSION_COOKIE_NAME, "")
+    session = load_session(db, session_token)
+    if session is None:
+        return None
+    return CurrentMemberContext(
+        session=session,
+        account=session.account,
+        bound_member=session.account.member,
+        acting_member=session.acting_member,
+    )
 
 
 def _as_float(value: Any, default: float) -> float:
@@ -102,7 +149,11 @@ def _build_member_assessment_lookup(project: Project, member_id: int, db: Sessio
 @router.get("/")
 def show_index(request: Request, db: Session = Depends(get_db)):
     """系统主页面（工作台）"""
-    projects = db.query(Project).all()
+    context = _resolve_member_context(request, db)
+    if context is None:
+        return RedirectResponse(url=_build_login_redirect_url(request), status_code=303)
+
+    projects = build_visible_projects_query(db, context).all()
     project_cards = []
 
     for project in projects:
@@ -123,10 +174,14 @@ def show_index(request: Request, db: Session = Depends(get_db)):
 @router.get("/project/{project_id}")
 def show_project_detail(request: Request, project_id: int, db: Session = Depends(get_db)):
     """项目详情画板页"""
+    context = _resolve_member_context(request, db)
+    if context is None:
+        return RedirectResponse(url=_build_login_redirect_url(request), status_code=303)
+
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-    all_members = db.query(Member).filter(Member.is_active == True).all()
+    ensure_project_visible(project, context)
     modules = db.query(Module).filter(Module.project_id == project_id).all()
     module_map = {module.id: module for module in modules}
     dependencies = db.query(models.FileDependency).filter(
@@ -143,11 +198,15 @@ def show_project_detail(request: Request, project_id: int, db: Session = Depends
         }
         for dependency in dependencies
     ]
+    is_project_manager = (
+        context.acting_member is not None and context.acting_member.id == project.created_by
+    )
+
     return templates.TemplateResponse("project_detail.html", {
         "request": request,
         "project": project,
         "members": project.members,
-        "all_members": all_members,
+        "is_project_manager": is_project_manager,
         "modules": modules,
         "dependencies": dependencies,
         "dependency_pairs": dependency_pairs,
@@ -159,15 +218,35 @@ def show_members_page(request: Request):
     return templates.TemplateResponse("members.html", {"request": request})
 
 
+@router.get("/social")
+def show_social_page(request: Request, db: Session = Depends(get_db)):
+    context = _resolve_member_context(request, db)
+    if context is None:
+        return RedirectResponse(url=_build_login_redirect_url(request), status_code=303)
+
+    return templates.TemplateResponse("social.html", {"request": request})
+
+
 @router.get("/overview")
 def show_overview_page(request: Request, db: Session = Depends(get_db)):
-    projects = db.query(Project).all()
+    context = _resolve_member_context(request, db)
+    if context is None:
+        return RedirectResponse(url=_build_login_redirect_url(request), status_code=303)
+
+    projects = build_visible_projects_query(db, context).all()
     return templates.TemplateResponse("overview.html", {"request": request, "projects": projects})
 
 
 @router.get("/todo")
-def show_todo_page(request: Request, member_id: int = 0, db: Session = Depends(get_db)):
+def show_todo_page(request: Request, db: Session = Depends(get_db)):
     """待办页面：显示该成员的待打分模块和其他待办事项"""
+    context = _resolve_member_context(request, db)
+    if context is None:
+        return RedirectResponse(url=_build_login_redirect_url(request), status_code=303)
+
+    member = require_business_member(context, "请选择当前业务身份后再查看待办。")
+    member_id = member.id
+
     pending_data = {"pending": [], "total_pending": 0, "total_expired": 0}
     pending_swaps = []
     active_work_modules = []
@@ -178,7 +257,7 @@ def show_todo_page(request: Request, member_id: int = 0, db: Session = Depends(g
     }
 
     if member_id > 0:
-        pending_data = get_pending_assessments(member_id, db)
+        pending_data = get_pending_assessments_for_member(member_id, db)
         pending_swaps = get_pending_swap_requests(member_id, db)
 
         grouped_pending_map = {}
@@ -219,9 +298,7 @@ def show_todo_page(request: Request, member_id: int = 0, db: Session = Depends(g
         for item in grouped_pending:
             item.pop("_deadline_value", None)
 
-        member = db.query(Member).filter(Member.id == member_id).first()
-        if member is not None:
-            wallet_summary["settled_amount"] = round(float(getattr(member, "total_earnings", 0.0) or 0.0), 2)
+        wallet_summary["settled_amount"] = round(float(getattr(member, "total_earnings", 0.0) or 0.0), 2)
 
         working_modules = db.query(Module).filter(
             Module.assigned_to == member_id,
@@ -263,15 +340,38 @@ def show_todo_page(request: Request, member_id: int = 0, db: Session = Depends(g
     })
 
 
+@router.get("/login")
+def show_login_page(request: Request, next: str = "/", db: Session = Depends(get_db)):
+    safe_next = _sanitize_next_path(next)
+    context = _resolve_member_context(request, db)
+    if context is not None:
+        return RedirectResponse(url=safe_next, status_code=303)
+    return templates.TemplateResponse("login.html", {"request": request, "next_url": safe_next})
+
+
+@router.get("/register")
+def show_register_page(request: Request, next: str = "/", db: Session = Depends(get_db)):
+    safe_next = _sanitize_next_path(next)
+    context = _resolve_member_context(request, db)
+    if context is not None:
+        return RedirectResponse(url=safe_next, status_code=303)
+    return templates.TemplateResponse("register.html", {"request": request, "next_url": safe_next})
+
+
 @router.get("/timeline/{project_id}")
 def show_timeline(request: Request, project_id: int, db: Session = Depends(get_db)):
     """
     项目全局监控大盘。
     计算真实进度百分比（加权），以及每个模块计划耗时 vs 实际耗时。
     """
+    context = _resolve_member_context(request, db)
+    if context is None:
+        return RedirectResponse(url=_build_login_redirect_url(request), status_code=303)
+
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+    ensure_project_visible(project, context)
 
     modules = db.query(Module).filter(Module.project_id == project_id).all()
 
@@ -325,14 +425,17 @@ def show_timeline(request: Request, project_id: int, db: Session = Depends(get_d
 
 
 @router.get("/scoring/{project_id}")
-def show_scoring_page(request: Request, project_id: int, member_id: int, db: Session = Depends(get_db)):
+def show_scoring_page(request: Request, project_id: int, db: Session = Depends(get_db)):
+    context = _resolve_member_context(request, db)
+    if context is None:
+        return RedirectResponse(url=_build_login_redirect_url(request), status_code=303)
+
+    member = require_business_member(context, "请选择当前业务身份后再评分。")
+    member_id = member.id
+
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
-
-    member = db.query(Member).filter(Member.id == member_id).first()
-    if not member:
-        raise HTTPException(status_code=404, detail="成员不存在")
 
     if member not in project.members:
         raise HTTPException(status_code=403, detail="你不是该项目的组员，无权评分")

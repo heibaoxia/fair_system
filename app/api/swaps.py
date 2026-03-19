@@ -6,7 +6,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app import models
-from app.api.dependencies import get_db
+from app.api.dependencies import CurrentMemberContext, get_current_member_context, get_db, require_project_pm
+from app.api.project_access import require_business_member
 
 router = APIRouter(prefix="/swaps", tags=["模块交换"])
 
@@ -75,7 +76,13 @@ def get_pending_swap_requests(member_id: int, db: Session) -> list[dict]:
 
 
 @router.post("/")
-def create_swap_request(payload: SwapCreatePayload, current_member_id: int, db: Session = Depends(get_db)):
+def create_swap_request(
+    payload: SwapCreatePayload,
+    context: CurrentMemberContext = Depends(get_current_member_context),
+    db: Session = Depends(get_db),
+):
+    actor = require_business_member(context, "请先选择当前业务身份后再发起交换。")
+
     module = db.query(models.Module).filter(models.Module.id == payload.module_id).first()
     if module is None:
         raise HTTPException(status_code=404, detail="模块不存在")
@@ -85,8 +92,7 @@ def create_swap_request(payload: SwapCreatePayload, current_member_id: int, db: 
         raise HTTPException(status_code=400, detail="当前模块没有负责人，无法发起交换")
 
     project = _get_project_or_404(int(module.project_id), db)
-    if int(project.created_by) != current_member_id:
-        raise HTTPException(status_code=403, detail="非 PM 无法发起请求")
+    require_project_pm(int(project.id), context, db)
     if not _member_in_project(project, payload.to_member_id):
         raise HTTPException(status_code=400, detail="接收人必须是项目组成员")
     if payload.to_member_id == int(module.assigned_to):
@@ -108,7 +114,7 @@ def create_swap_request(payload: SwapCreatePayload, current_member_id: int, db: 
 
     swap = models.ModuleSwapRequest(
         project_id=project.id,
-        initiated_by=current_member_id,
+        initiated_by=actor.id,
         swap_type=payload.swap_type,
         module_id=payload.module_id,
         swap_module_id=swap_module_id,
@@ -122,17 +128,26 @@ def create_swap_request(payload: SwapCreatePayload, current_member_id: int, db: 
     return {"message": "交换请求已发起", "swap_id": swap.id, "status": swap.status}
 
 
-@router.get("/pending/{member_id}")
-def read_pending_swaps(member_id: int, db: Session = Depends(get_db)):
-    return get_pending_swap_requests(member_id, db)
+@router.get("/pending")
+def read_pending_swaps(
+    context: CurrentMemberContext = Depends(get_current_member_context),
+    db: Session = Depends(get_db),
+):
+    actor = require_business_member(context, "请先选择当前业务身份后再查看交换请求。")
+    return get_pending_swap_requests(actor.id, db)
 
 
 @router.post("/{swap_id}/accept")
-def accept_swap(swap_id: int, member_id: int, db: Session = Depends(get_db)):
+def accept_swap(
+    swap_id: int,
+    context: CurrentMemberContext = Depends(get_current_member_context),
+    db: Session = Depends(get_db),
+):
+    actor = require_business_member(context, "请先选择当前业务身份后再处理交换请求。")
     swap = _get_swap_or_404(swap_id, db)
     if swap.status != "待确认":
         raise HTTPException(status_code=400, detail="该交换请求已处理")
-    if int(swap.to_member_id) != member_id:
+    if int(swap.to_member_id) != actor.id:
         raise HTTPException(status_code=403, detail="只有接收人才能接受交换")
 
     module = db.query(models.Module).filter(models.Module.id == swap.module_id).first()
@@ -159,11 +174,16 @@ def accept_swap(swap_id: int, member_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{swap_id}/reject")
-def reject_swap(swap_id: int, member_id: int, db: Session = Depends(get_db)):
+def reject_swap(
+    swap_id: int,
+    context: CurrentMemberContext = Depends(get_current_member_context),
+    db: Session = Depends(get_db),
+):
+    actor = require_business_member(context, "请先选择当前业务身份后再处理交换请求。")
     swap = _get_swap_or_404(swap_id, db)
     if swap.status != "待确认":
         raise HTTPException(status_code=400, detail="该交换请求已处理")
-    if int(swap.to_member_id) != member_id:
+    if int(swap.to_member_id) != actor.id:
         raise HTTPException(status_code=403, detail="只有接收人才能拒绝交换")
 
     swap.status = "已拒绝"
@@ -173,11 +193,15 @@ def reject_swap(swap_id: int, member_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{swap_id}/cancel")
-def cancel_swap(swap_id: int, current_member_id: int, db: Session = Depends(get_db)):
+def cancel_swap(
+    swap_id: int,
+    context: CurrentMemberContext = Depends(get_current_member_context),
+    db: Session = Depends(get_db),
+):
+    require_business_member(context, "请先选择当前业务身份后再取消交换请求。")
     swap = _get_swap_or_404(swap_id, db)
     project = _get_project_or_404(int(swap.project_id), db)
-    if int(project.created_by) != current_member_id:
-        raise HTTPException(status_code=403, detail="只有 PM 可以取消交换请求")
+    require_project_pm(int(project.id), context, db)
     if swap.status != "待确认":
         raise HTTPException(status_code=400, detail="只有待确认的请求才能取消")
 

@@ -5,7 +5,7 @@
 2. 响应过滤：我们要把数据库对象 (SQLAlchemy 返回的类) 发给前端时，过滤掉敏感信息(比如密码)，并按照下面的格式打包成 JSON 给他们。
 """
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -29,7 +29,10 @@ class ConfiguredModel(BaseModel):
 # Base是基础字段，读取和创建时都有的
 class MemberBase(BaseModel):
     name: str # 姓名
-    tel: str # 手机号
+    tel: Optional[str] = None # 手机号
+    gender: Literal["male", "female", "private"] = "private"
+    public_email: bool = False
+    public_tel: bool = False
     is_active: bool = True
     skills: Optional[str] = "" # 用户的技能标签（前端可以传空字符串）
     available_hours: Optional[float] = 0.0 # 空闲可用时长
@@ -42,6 +45,9 @@ class MemberUpdate(BaseModel):
     前端只需传想修改的字段，未传的字段保持数据库原值不变。"""
     name: Optional[str] = None
     tel: Optional[str] = None
+    gender: Optional[Literal["male", "female", "private"]] = None
+    public_email: Optional[bool] = None
+    public_tel: Optional[bool] = None
     is_active: Optional[bool] = None
     skills: Optional[str] = None
     available_hours: Optional[float] = None

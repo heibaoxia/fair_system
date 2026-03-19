@@ -19,6 +19,13 @@ from app.api.dependencies import get_db
 router = APIRouter(prefix="/members", tags=["成员管理"])
 
 
+def _normalize_tel(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
 # ==========================================
 # 1. 注册/创建新成员 (POST 请求)
 # ==========================================
@@ -33,17 +40,19 @@ def create_member(member: schemas.MemberCreate, db: Session = Depends(get_db)):
     没注册过，就往数据库里插入一条新记录。
     """
     
-    # 获取数据库里第一个手机号和传进来的手机号一样的人
-    db_member = db.query(models.Member).filter(models.Member.tel == member.tel).first()
-    
-    if db_member:
-        # 如果找到了，说明重复注册！用 HTTPException 直接抛出错误给前端
-        raise HTTPException(status_code=400, detail="该手机号码已被注册！")
+    payload = member.model_dump()
+    payload["tel"] = _normalize_tel(payload.get("tel"))
+
+    if payload["tel"] is not None:
+        db_member = db.query(models.Member).filter(models.Member.tel == payload["tel"]).first()
+        if db_member:
+            # 如果找到了，说明重复注册！用 HTTPException 直接抛出错误给前端
+            raise HTTPException(status_code=400, detail="该手机号码已被注册！")
         
     # 如果没找到，说明可以注册。
     # ** member.model_dump()：这是一个魔法，它可以把对象变成字典 {"name":"小明", "tel":"xxx"}
     # **前面的两个星星的意思是解包字典，相当于 name="小明", tel="xxx"
-    new_member = models.Member(**member.model_dump())
+    new_member = models.Member(**payload)
     
     db.add(new_member)
     db.commit()
@@ -108,10 +117,14 @@ def update_member(member_id: int, member_in: schemas.MemberUpdate, db: Session =
 
     # 如果改了手机号，要确保新手机号不和别人冲突
     if "tel" in update_data:
-        existing = db.query(models.Member).filter(
-            models.Member.tel == update_data["tel"],
-            models.Member.id != member_id
-        ).first()
+        update_data["tel"] = _normalize_tel(update_data["tel"])
+        if update_data["tel"] is None:
+            existing = None
+        else:
+            existing = db.query(models.Member).filter(
+                models.Member.tel == update_data["tel"],
+                models.Member.id != member_id
+            ).first()
         if existing:
             raise HTTPException(status_code=400, detail="该手机号已被其他成员使用！")
 

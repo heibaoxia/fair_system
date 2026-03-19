@@ -1,0 +1,608 @@
+{% extends "base.html" %}
+
+{% block title %}&#31038;&#20132;&#20013;&#24515;{% endblock %}
+
+{% block extra_css %}
+<style>
+    .social-layout {
+        display: grid;
+        gap: var(--space-xl);
+    }
+
+    .social-search-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--space-md);
+        align-items: end;
+        margin-top: var(--space-lg);
+    }
+
+    .social-section-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-xl);
+    }
+
+    .social-card {
+        min-height: 100%;
+    }
+
+    .social-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: var(--space-md);
+        margin-bottom: var(--space-md);
+    }
+
+    .social-card-title {
+        margin: 0;
+        font-size: 1.1rem;
+    }
+
+    .social-card-subtitle {
+        margin: 0.35rem 0 0;
+        color: var(--text-muted);
+        font-size: 0.92rem;
+    }
+
+    .social-list {
+        display: grid;
+        gap: var(--space-md);
+    }
+
+    .social-profile {
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-lg);
+        padding: var(--space-md);
+        background: var(--bg-surface);
+    }
+
+    .social-profile-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: var(--space-md);
+    }
+
+    .social-profile-name {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+
+    .social-profile-meta {
+        margin-top: 0.5rem;
+        display: grid;
+        gap: 0.35rem;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    .social-empty-state {
+        border: 1px dashed var(--border-light);
+        border-radius: var(--radius-lg);
+        padding: var(--space-lg);
+        color: var(--text-muted);
+        background: rgba(255, 255, 255, 0.5);
+    }
+
+    .social-status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.28rem 0.7rem;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.12);
+        color: #1d4ed8;
+        font-size: 0.8rem;
+        font-weight: 700;
+    }
+
+    .social-invite-group {
+        display: grid;
+        gap: var(--space-md);
+    }
+
+    .social-invite-group + .social-invite-group {
+        margin-top: var(--space-lg);
+    }
+
+    .social-invite-heading {
+        margin: 0;
+        font-size: 0.98rem;
+    }
+
+    .social-invite-card {
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-lg);
+        padding: var(--space-md);
+        background: var(--bg-surface);
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .social-invite-meta {
+        display: grid;
+        gap: 0.35rem;
+        color: var(--text-muted);
+        font-size: 0.9rem;
+    }
+
+    .social-invite-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    @media (max-width: 960px) {
+        .social-section-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .social-search-form {
+            grid-template-columns: 1fr;
+        }
+
+        .social-profile-top {
+            flex-direction: column;
+            align-items: stretch;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="social-layout">
+    <div class="page-header" style="position: static; border-radius: var(--radius-lg);">
+        <div>
+            <h1 class="page-title">&#31038;&#20132;&#20013;&#24515;</h1>
+            <p style="margin: 0.75rem 0 0; color: var(--text-muted);">
+                Search by exact account ID, manage follows, and review current relationship buckets.
+            </p>
+        </div>
+    </div>
+
+    <section class="card social-card">
+        <div class="social-card-header">
+            <div>
+                <h2 class="social-card-title">&#25628;&#32034;&#36134;&#25143;ID</h2>
+                <p class="social-card-subtitle">Use an exact account ID and call the existing social search API.</p>
+            </div>
+        </div>
+
+        <form id="social-search-form" class="social-search-form">
+            <div class="form-group" style="margin: 0;">
+                <label for="social-search-account-id">Account ID</label>
+                <input
+                    id="social-search-account-id"
+                    name="account_id"
+                    type="text"
+                    pattern="[0-9]+"
+                    class="input-field"
+                    placeholder="e.g. 10001"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    spellcheck="false"
+                >
+            </div>
+            <button id="social-search-submit" type="submit" class="btn btn-primary">&#25628;&#32034;</button>
+        </form>
+
+        <div id="social-search-results" style="margin-top: var(--space-lg);">
+            <div class="social-empty-state">No search results yet. Enter an exact account ID to begin.</div>
+        </div>
+    </section>
+
+    <div class="social-section-grid">
+        <section class="card social-card">
+            <div class="social-card-header">
+                <div>
+                    <h2 class="social-card-title">&#25105;&#20851;&#27880;&#35841;</h2>
+                    <p class="social-card-subtitle">Accounts that you follow, but that are not mutual friends yet.</p>
+                </div>
+                <span class="social-status-chip" id="social-following-count">0</span>
+            </div>
+            <div id="social-following-list" class="social-list">
+                <div class="social-empty-state">Loading follows...</div>
+            </div>
+        </section>
+
+        <section class="card social-card">
+            <div class="social-card-header">
+                <div>
+                    <h2 class="social-card-title">&#35841;&#20851;&#27880;&#25105;</h2>
+                    <p class="social-card-subtitle">Accounts that follow you and may be worth following back.</p>
+                </div>
+                <span class="social-status-chip" id="social-followers-count">0</span>
+            </div>
+            <div id="social-followers-list" class="social-list">
+                <div class="social-empty-state">Loading followers...</div>
+            </div>
+        </section>
+
+        <section class="card social-card">
+            <div class="social-card-header">
+                <div>
+                    <h2 class="social-card-title">&#22909;&#21451;</h2>
+                    <p class="social-card-subtitle">Mutual follows are grouped here as friends.</p>
+                </div>
+                <span class="social-status-chip" id="social-friends-count">0</span>
+            </div>
+            <div id="social-friends-list" class="social-list">
+                <div class="social-empty-state">Loading friends...</div>
+            </div>
+        </section>
+
+        <section class="card social-card">
+            <div class="social-card-header">
+                <div>
+                    <h2 class="social-card-title">&#25105;&#30340;&#39033;&#30446;&#36992;&#35831;</h2>
+                    <p class="social-card-subtitle">Review pending invites, accept or reject them, and keep decision history visible.</p>
+                </div>
+            </div>
+            <div class="social-invite-group">
+                <h3 class="social-invite-heading">待处理邀请</h3>
+                <div id="social-project-invites-pending-list" class="social-list">
+                    <div class="social-empty-state">No pending invites yet.</div>
+                </div>
+            </div>
+            <div class="social-invite-group">
+                <h3 class="social-invite-heading">历史记录</h3>
+                <div id="social-project-invites-history-list" class="social-list">
+                    <div class="social-empty-state">No invite history yet.</div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const socialState = {
+        lastSearchedAccountId: null,
+    };
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    function parseExactAccountId(rawValue) {
+        const normalized = String(rawValue ?? '').trim();
+        if (!/^[0-9]+$/.test(normalized)) {
+            return null;
+        }
+
+        const accountId = Number(normalized);
+        if (!Number.isSafeInteger(accountId) || accountId <= 0) {
+            return null;
+        }
+
+        return normalized;
+    }
+
+    function renderProfileCard(profile) {
+        const action = profile.is_following ? 'unfollow' : 'follow';
+        const actionLabel = profile.is_following ? '\u53d6\u6d88\u5173\u6ce8' : '\u5173\u6ce8';
+        const actionClass = profile.is_following ? 'btn btn-secondary' : 'btn btn-primary';
+        const contactBits = [
+            `Account ID: ${profile.account_id}`,
+            `Gender: ${profile.gender}`,
+        ];
+
+        if (profile.email) {
+            contactBits.push(`Email: ${profile.email}`);
+        }
+        if (profile.tel) {
+            contactBits.push(`Phone: ${profile.tel}`);
+        }
+
+        return `
+            <article class="social-profile">
+                <div class="social-profile-top">
+                    <div>
+                        <h3 class="social-profile-name">${escapeHtml(profile.username)}</h3>
+                        <div class="social-profile-meta">
+                            ${contactBits.map((item) => `<span>${escapeHtml(item)}</span>`).join('')}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        class="${actionClass}"
+                        data-social-action="${action}"
+                        data-account-id="${profile.account_id}"
+                    >${actionLabel}</button>
+                </div>
+            </article>
+        `;
+    }
+
+    function renderProfileList(containerId, profiles, emptyMessage, countId) {
+        const container = document.getElementById(containerId);
+        const count = document.getElementById(countId);
+        if (!container || !count) {
+            return;
+        }
+
+        count.textContent = String(profiles.length);
+        if (!profiles.length) {
+            container.innerHTML = `<div class="social-empty-state">${escapeHtml(emptyMessage)}</div>`;
+            return;
+        }
+
+        container.innerHTML = profiles.map((profile) => renderProfileCard(profile)).join('');
+    }
+
+    function renderSearchResults(results, searchedAccountId) {
+        const container = document.getElementById('social-search-results');
+        if (!container) {
+            return;
+        }
+
+        if (!results.length) {
+            const suffix = searchedAccountId ? ` (Account ID: ${escapeHtml(searchedAccountId)})` : '';
+            container.innerHTML = `<div class="social-empty-state">No matching public account found${suffix}.</div>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="social-list">
+                ${results.map((profile) => renderProfileCard(profile)).join('')}
+            </div>
+        `;
+    }
+
+    function renderSearchFailure(message, searchedAccountId) {
+        const container = document.getElementById('social-search-results');
+        if (!container) {
+            return;
+        }
+
+        const suffix = searchedAccountId ? ` (Account ID: ${escapeHtml(searchedAccountId)})` : '';
+        container.innerHTML = `<div class="social-empty-state">${escapeHtml(message)}${suffix}</div>`;
+    }
+
+    function formatInviteTimestamp(value) {
+        if (!value) {
+            return '-';
+        }
+
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return String(value);
+        }
+
+        return date.toLocaleString();
+    }
+
+    function renderInviteCard(invite, isPending) {
+        const inviteMeta = [
+            `邀请人: ${invite.inviter_username} (Account ID: ${invite.inviter_account_id})`,
+            `项目总收入: ${Number(invite.project_total_revenue || 0).toFixed(2)}`,
+            `成员数: ${invite.project_member_count}`,
+            `状态: ${invite.status}`,
+            `创建时间: ${formatInviteTimestamp(invite.created_at)}`,
+        ];
+
+        if (invite.project_description) {
+            inviteMeta.push(`项目简介: ${invite.project_description}`);
+        }
+        if (!isPending) {
+            inviteMeta.push(`处理时间: ${formatInviteTimestamp(invite.resolved_at)}`);
+        }
+
+        const actions = isPending
+            ? `
+                <div class="social-invite-actions">
+                    <button
+                        type="button"
+                        class="btn btn-primary"
+                        data-social-invite-action="accept"
+                        data-invite-id="${invite.id}"
+                    >Accept</button>
+                    <button
+                        type="button"
+                        class="btn btn-secondary"
+                        data-social-invite-action="reject"
+                        data-invite-id="${invite.id}"
+                    >Reject</button>
+                </div>
+            `
+            : '';
+
+        return `
+            <article class="social-invite-card">
+                <div class="social-profile-top">
+                    <div>
+                        <h3 class="social-profile-name">${escapeHtml(invite.project_name)}</h3>
+                    </div>
+                    <span class="social-status-chip">${escapeHtml(invite.status)}</span>
+                </div>
+                <div class="social-invite-meta">
+                    ${inviteMeta.map((item) => `<span>${escapeHtml(item)}</span>`).join('')}
+                </div>
+                ${actions}
+            </article>
+        `;
+    }
+
+    function renderInviteList(containerId, invites, emptyMessage, isPending) {
+        const container = document.getElementById(containerId);
+        if (!container) {
+            return;
+        }
+
+        if (!invites.length) {
+            container.innerHTML = `<div class="social-empty-state">${escapeHtml(emptyMessage)}</div>`;
+            return;
+        }
+
+        container.innerHTML = invites.map((invite) => renderInviteCard(invite, isPending)).join('');
+    }
+
+    async function fetchJson(url, options = {}, fallbackMessage = 'Request failed.') {
+        const response = await fetch(url, options);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(getApiErrorMessage(payload, fallbackMessage));
+        }
+        return payload;
+    }
+
+    async function loadRelationships() {
+        try {
+            const data = await fetchJson('/social/relationships', {}, 'Failed to load social relationships.');
+            renderProfileList('social-following-list', data.following || [], 'You are not following anyone yet.', 'social-following-count');
+            renderProfileList('social-followers-list', data.followers || [], 'No one is following you yet.', 'social-followers-count');
+            renderProfileList('social-friends-list', data.friends || [], 'No mutual friends yet.', 'social-friends-count');
+        } catch (error) {
+            const message = escapeHtml(error.message || 'Failed to load social relationships.');
+            renderProfileList('social-following-list', [], message, 'social-following-count');
+            renderProfileList('social-followers-list', [], message, 'social-followers-count');
+            renderProfileList('social-friends-list', [], message, 'social-friends-count');
+            showToast(error.message || 'Failed to load social relationships.', true);
+        }
+    }
+
+    async function loadProjectInvites() {
+        try {
+            const data = await fetchJson('/social/project-invites', {}, 'Failed to load project invites.');
+            renderInviteList(
+                'social-project-invites-pending-list',
+                data.pending || [],
+                'No pending invites yet.',
+                true,
+            );
+            renderInviteList(
+                'social-project-invites-history-list',
+                data.history || [],
+                'No invite history yet.',
+                false,
+            );
+        } catch (error) {
+            const message = error.message || 'Failed to load project invites.';
+            renderInviteList('social-project-invites-pending-list', [], message, true);
+            renderInviteList('social-project-invites-history-list', [], message, false);
+            showToast(message, true);
+        }
+    }
+
+    async function runSearch(accountIdOverride = null) {
+        const input = document.getElementById('social-search-account-id');
+        if (!input) {
+            return;
+        }
+
+        const accountId = accountIdOverride ?? parseExactAccountId(input.value);
+        if (!accountId) {
+            showToast('Please enter a positive integer account ID.', true);
+            return;
+        }
+
+        input.value = accountId;
+        socialState.lastSearchedAccountId = accountId;
+
+        try {
+            const data = await fetchJson(
+                `/social/search?account_id=${encodeURIComponent(accountId)}`,
+                {},
+                'Failed to search account.',
+            );
+            renderSearchResults(data.results || [], accountId);
+        } catch (error) {
+            renderSearchFailure(error.message || 'Failed to search account. Please try again later.', accountId);
+            showToast(error.message || 'Failed to search account.', true);
+        }
+    }
+
+    async function toggleFollow(accountId, action) {
+        const method = action === 'unfollow' ? 'DELETE' : 'POST';
+        const successMessage = action === 'unfollow' ? '\u5df2\u53d6\u6d88\u5173\u6ce8' : '\u5173\u6ce8\u6210\u529f';
+
+        try {
+            await fetchJson(`/social/follow/${accountId}`, { method }, 'Failed to update follow state.');
+            showToast(successMessage);
+            await loadRelationships();
+            if (socialState.lastSearchedAccountId) {
+                await runSearch(socialState.lastSearchedAccountId);
+            }
+        } catch (error) {
+            showToast(error.message || 'Failed to update follow state.', true);
+        }
+    }
+
+    function getProjectInviteDecisionUrl(inviteId, action) {
+        if (action === 'accept') {
+            return `/project-invites/${inviteId}/accept`;
+        }
+        return `/project-invites/${inviteId}/reject`;
+    }
+
+    async function decideProjectInvite(inviteId, action) {
+        const successMessage = action === 'accept' ? 'Invite accepted.' : 'Invite rejected.';
+        try {
+            await fetchJson(
+                getProjectInviteDecisionUrl(inviteId, action),
+                { method: 'POST' },
+                'Failed to update invite.',
+            );
+            showToast(successMessage);
+        } catch (error) {
+            showToast(error.message || 'Failed to update invite.', true);
+        } finally {
+            await loadProjectInvites();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const searchForm = document.getElementById('social-search-form');
+        if (searchForm) {
+            searchForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                await runSearch();
+            });
+        }
+
+        document.addEventListener('click', async (event) => {
+            const inviteActionButton = event.target.closest('[data-social-invite-action]');
+            if (inviteActionButton && inviteActionButton.dataset.inviteId) {
+                inviteActionButton.disabled = true;
+                try {
+                    await decideProjectInvite(
+                        inviteActionButton.dataset.inviteId,
+                        inviteActionButton.dataset.socialInviteAction,
+                    );
+                } finally {
+                    inviteActionButton.disabled = false;
+                }
+                return;
+            }
+
+            const actionButton = event.target.closest('[data-social-action]');
+            if (!actionButton || !actionButton.dataset.accountId) {
+                return;
+            }
+
+            actionButton.disabled = true;
+            try {
+                await toggleFollow(actionButton.dataset.accountId, actionButton.dataset.socialAction);
+            } finally {
+                actionButton.disabled = false;
+            }
+        });
+
+        loadRelationships();
+        loadProjectInvites();
+    });
+</script>
+{% endblock %}

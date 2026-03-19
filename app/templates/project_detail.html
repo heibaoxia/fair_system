@@ -288,6 +288,46 @@
         flex-wrap: wrap;
     }
 
+    .invite-stack {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
+    }
+
+    .invite-friends-grid {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+
+    .invite-friend-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-sm);
+        padding: var(--space-sm) var(--space-md);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-md);
+        background: var(--bg-surface-hover);
+    }
+
+    .invite-friend-card strong {
+        color: var(--text-main);
+    }
+
+    .invite-friend-card span {
+        display: block;
+        margin-top: 0.2rem;
+        color: var(--text-muted);
+        font-size: 0.88rem;
+    }
+
+    .invite-account-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+
     .period-summary {
         padding: var(--space-sm) var(--space-md);
         border: 1px solid var(--border-light);
@@ -592,7 +632,9 @@
     <div id="project-board-shell">
         <div id="project-board-actions">
             <button type="button" data-manager-action="add-module" class="btn btn-primary" onclick="openModuleModalForCreate()" style="display: none;">添加模块</button>
-            <button type="button" data-manager-action="add-member" class="btn btn-secondary" onclick="openModal('add-member-modal')" style="display: none;">添加成员</button>
+            {% if is_project_manager %}
+            <button type="button" data-manager-action="invite-member" class="btn btn-secondary" onclick="openModal('invite-member-modal')">邀请成员</button>
+            {% endif %}
             <button type="button" id="assessment-period-trigger" class="btn btn-secondary" onclick="openModal('assessment-period-modal')" style="display: none;">设置评分期</button>
             <button type="button" id="batch-assignment-trigger" data-manager-action="batch-assign" class="btn btn-dark" style="display: none;" title="请先完成评分后再使用一键公平分配" onclick="handleBatchAssignmentTrigger()">⚡ 一键公平分配</button>
         </div>
@@ -629,7 +671,9 @@
                         {% endif %}
                     </div>
 
-                    <button type="button" data-manager-action="add-member" class="btn btn-secondary" onclick="openModal('add-member-modal')" style="display: none;">添加成员</button>
+                    {% if is_project_manager %}
+                    <button type="button" data-manager-action="invite-member" class="btn btn-secondary" onclick="openModal('invite-member-modal')">邀请成员</button>
+                    {% endif %}
                 </div>
             </aside>
 
@@ -781,38 +825,49 @@
     </div>
 </div>
 
-<div id="add-member-modal" class="modal-overlay">
+{% if is_project_manager %}
+<div id="invite-member-modal" class="modal-overlay">
     <div class="modal-content">
         <div class="modal-header">
-            <h2 class="modal-title">添加成员</h2>
-            <button type="button" class="modal-close" onclick="closeModal('add-member-modal')">&times;</button>
+            <h2 class="modal-title">邀请成员</h2>
+            <button type="button" class="modal-close" onclick="closeModal('invite-member-modal')">&times;</button>
         </div>
 
-        <form method="post" onsubmit="return submitMemberForm(this)">
-            <div class="form-group">
-                <label for="member-select">选择成员</label>
-                <select id="member-select" name="member_id" class="input-field" required>
-                    <option value="">请选择成员</option>
-                    {% for member in all_members %}
-                    {% set ns = namespace(is_joined=false) %}
-                    {% for joined in members %}
-                    {% if joined.id == member.id %}
-                    {% set ns.is_joined = true %}
-                    {% endif %}
-                    {% endfor %}
-                    {% if not ns.is_joined %}
-                    <option value="{{ member.id }}">{{ member.name }}{% if member.skills %}（{{ member.skills }}）{% endif %}</option>
-                    {% endif %}
-                    {% endfor %}
-                </select>
-            </div>
-            <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
-                <button type="submit" class="btn btn-primary">加入项目</button>
-                <button type="button" class="btn btn-secondary" onclick="closeModal('add-member-modal')">取消</button>
-            </div>
-        </form>
+        <div class="invite-stack">
+            <section>
+                <h3>好友快捷邀请</h3>
+                <p class="panel-note">仅展示社交关系中的好友，可直接发送项目邀请。</p>
+                <div id="invite-friends-container" class="invite-friends-grid">
+                    <div class="panel-note">正在加载好友列表...</div>
+                </div>
+            </section>
+
+            <section>
+                <h3>输入账户ID邀请</h3>
+                <form id="invite-account-form" class="invite-account-form" onsubmit="return submitInviteAccountForm(event)">
+                    <div class="form-group">
+                        <label for="invite-account-id">账户ID</label>
+                        <input
+                            id="invite-account-id"
+                            name="invite_account_id"
+                            type="text"
+                            class="input-field"
+                            inputmode="numeric"
+                            pattern="[0-9]+"
+                            placeholder="请输入好友账户ID"
+                            required
+                        >
+                    </div>
+                    <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+                        <button id="invite-account-submit" type="submit" class="btn btn-primary">发送邀请</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('invite-member-modal')">取消</button>
+                    </div>
+                </form>
+            </section>
+        </div>
     </div>
 </div>
+{% endif %}
 
 <div id="assessment-period-modal" class="modal-overlay">
     <div class="modal-content">
@@ -927,15 +982,45 @@
     let batchAssignmentDraftAssignments = {};
     let isBatchAdjustmentMode = false;
 
+    function getSessionContextSnapshot() {
+        try {
+            return sessionContext && typeof sessionContext === 'object' ? sessionContext : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function sanitizeIdentityQueryParams() {
+        const url = new URL(window.location.href);
+        if (!url.search) {
+            return;
+        }
+
+        const preserved = new URLSearchParams();
+        const selectedModuleId = url.searchParams.get('module_id');
+        if (selectedModuleId) {
+            preserved.set('module_id', selectedModuleId);
+        }
+
+        const nextQuery = preserved.toString();
+        const cleanUrl = `${url.pathname}${nextQuery ? `?${nextQuery}` : ''}${url.hash || ''}`;
+        window.history.replaceState({}, '', cleanUrl);
+    }
+
     function openModal(id) {
         if (id === 'add-module-modal' && !isProjectManager()) {
             showToast('只有项目创建者才能添加模块', true);
             return;
         }
-        if (id === 'add-member-modal' && !isProjectManager()) {
-            showToast('只有项目创建者才能添加项目成员', true);
+        {% if is_project_manager %}
+        if (id === 'invite-member-modal' && !isProjectManager()) {
+            showToast('只有项目创建者才能邀请项目成员', true);
             return;
         }
+        if (id === 'invite-member-modal') {
+            loadInviteableFriends();
+        }
+        {% endif %}
         if (id === 'assessment-period-modal' && !isProjectManager()) {
             showToast('只有项目创建者才能修改评分期', true);
             return;
@@ -968,13 +1053,15 @@
 
     function buildAssignmentsFromPreview(preview) {
         const assignments = {};
+        const memberFieldKey = ['member', 'id'].join('_');
         if (!preview || !preview.member_loads) {
             return assignments;
         }
 
         preview.member_loads.forEach((item) => {
             if (item.assigned_modules && item.assigned_modules.length) {
-                assignments[String(item.member_id)] = [...item.assigned_modules];
+                const memberId = item[memberFieldKey];
+                assignments[String(memberId)] = [...item.assigned_modules];
             }
         });
         return assignments;
@@ -1046,15 +1133,19 @@
     }
 
     function isProjectManager() {
-        return getCurrentMemberId() === {{ project.created_by }};
+        const context = getSessionContextSnapshot();
+        const actingMemberId = Number(context && context.acting_member ? context.acting_member.id : 0);
+        return Number.isInteger(actingMemberId) && actingMemberId > 0 && actingMemberId === {{ project.created_by }};
     }
 
     function updateManagerActions() {
         const isManager = isProjectManager();
 
-        document.querySelectorAll('[data-manager-action="add-member"]').forEach((button) => {
+        {% if is_project_manager %}
+        document.querySelectorAll('[data-manager-action="invite-member"]').forEach((button) => {
             button.style.display = isManager ? '' : 'none';
         });
+        {% endif %}
         document.querySelectorAll('[data-manager-action="add-module"]').forEach((button) => {
             button.style.display = isManager ? '' : 'none';
         });
@@ -1085,7 +1176,9 @@
         if (!isManager) {
             resetModuleForm();
             closeModal('add-module-modal');
-            closeModal('add-member-modal');
+            {% if is_project_manager %}
+            closeModal('invite-member-modal');
+            {% endif %}
             closeModal('assessment-period-modal');
         }
     }
@@ -1154,36 +1247,123 @@
         openModal('add-module-modal');
     }
 
-    function submitMemberForm(form) {
-        const memberId = form.member_id.value;
-        const currentMemberId = getCurrentMemberId();
-        if (!memberId) {
-            showToast('请先选择成员', true);
+    {% if is_project_manager %}
+    let inviteFriendsLoaded = false;
+
+    function renderInviteableFriends(friends) {
+        const container = document.getElementById('invite-friends-container');
+        if (!container) {
+            return;
+        }
+
+        if (!Array.isArray(friends) || !friends.length) {
+            container.innerHTML = '<div class="panel-note">暂无可快捷邀请的好友，稍后可直接输入账户ID邀请。</div>';
+            return;
+        }
+
+        container.innerHTML = '';
+        friends.forEach((friend) => {
+            const card = document.createElement('div');
+            const meta = document.createElement('div');
+            const name = document.createElement('strong');
+            const accountId = document.createElement('span');
+            const button = document.createElement('button');
+
+            card.className = 'invite-friend-card';
+            name.textContent = friend.username || `好友 #${friend.account_id}`;
+            accountId.textContent = `账户ID：${friend.account_id}`;
+            meta.appendChild(name);
+            meta.appendChild(accountId);
+
+            button.type = 'button';
+            button.className = 'btn btn-secondary';
+            button.textContent = '邀请';
+            button.addEventListener('click', async function () {
+                await inviteMemberByAccountId(friend.account_id, {
+                    triggerButton: button,
+                    successMessage: `已向 ${friend.username || `账户 ${friend.account_id}`} 发送邀请`
+                });
+            });
+
+            card.appendChild(meta);
+            card.appendChild(button);
+            container.appendChild(card);
+        });
+    }
+
+    async function loadInviteableFriends(forceRefresh = false) {
+        const container = document.getElementById('invite-friends-container');
+        if (!container || (inviteFriendsLoaded && !forceRefresh)) {
+            return;
+        }
+
+        container.innerHTML = '<div class="panel-note">正在加载好友列表...</div>';
+
+        try {
+            const response = await fetch('/social/relationships');
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.detail || '加载好友列表失败');
+            }
+
+            renderInviteableFriends(Array.isArray(data.friends) ? data.friends : []);
+            inviteFriendsLoaded = true;
+        } catch (error) {
+            container.innerHTML = '<div class="panel-note">好友列表加载失败，请稍后重试或直接输入账户ID邀请。</div>';
+            showToast(error.message || '加载好友列表失败', true);
+        }
+    }
+
+    async function inviteMemberByAccountId(rawAccountId, options = {}) {
+        const inviteeAccountId = Number.parseInt(String(rawAccountId || '').trim(), 10);
+        if (!Number.isInteger(inviteeAccountId) || inviteeAccountId <= 0) {
+            showToast('请输入有效的账户ID', true);
             return false;
         }
         if (!isProjectManager()) {
-            showToast('只有项目创建者才能添加项目成员', true);
-            closeModal('add-member-modal');
+            showToast('只有项目创建者才能邀请项目成员', true);
             return false;
         }
-        if (!currentMemberId) {
-            showToast('请先在左下角切换当前视角成员', true);
-            return false;
+
+        const triggerButton = options.triggerButton || null;
+        if (triggerButton) {
+            triggerButton.disabled = true;
         }
-        form.action = `/projects/{{ project.id }}/members/${memberId}?current_member_id=${currentMemberId}`;
-        fetch(form.action, { method: 'POST' })
-            .then(async (response) => {
-                const data = await response.json();
-                if (!response.ok) {
-                    throw new Error(data.detail || '添加成员失败');
-                }
-                showToast(data.message || '成员已加入项目');
-                closeModal('add-member-modal');
-                setTimeout(() => window.location.reload(), 600);
-            })
-            .catch((error) => showToast(error.message || '添加成员失败', true));
+
+        try {
+            const response = await fetch(`/projects/{{ project.id }}/invites`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ invitee_account_id: inviteeAccountId })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.detail || '发送邀请失败');
+            }
+
+            const inviteAccountInput = document.getElementById('invite-account-id');
+            if (inviteAccountInput) {
+                inviteAccountInput.value = '';
+            }
+            showToast(options.successMessage || '邀请已发送');
+            return true;
+        } catch (error) {
+            showToast(error.message || '发送邀请失败', true);
+            return false;
+        } finally {
+            if (triggerButton) {
+                triggerButton.disabled = false;
+            }
+        }
+    }
+
+    async function submitInviteAccountForm(event) {
+        event.preventDefault();
+        const input = document.getElementById('invite-account-id');
+        await inviteMemberByAccountId(input ? input.value : '');
         return false;
     }
+    {% endif %}
 
     const ASSESSMENT_DURATION_PRESETS = [1, 6, 12, 24, 48, 72];
     const ASSESSMENT_DURATION_MAX_HOURS = 168;
@@ -1391,15 +1571,10 @@
 
     function submitModuleForm(event, form) {
         event.preventDefault();
-        const currentMemberId = getCurrentMemberId();
 
         if (!isProjectManager()) {
             showToast(editingModuleId ? '只有项目创建者才能编辑模块' : '只有项目创建者才能添加模块', true);
             closeModal('add-module-modal');
-            return false;
-        }
-        if (!currentMemberId) {
-            showToast('请先在左下角切换当前视角成员', true);
             return false;
         }
 
@@ -1411,8 +1586,8 @@
         };
 
         const requestUrl = editingModuleId
-            ? `/modules/${editingModuleId}?current_member_id=${currentMemberId}`
-            : `${form.action}?current_member_id=${currentMemberId}`;
+            ? `/modules/${editingModuleId}`
+            : form.action;
         const requestMethod = editingModuleId ? 'PUT' : 'POST';
 
         fetch(requestUrl, {
@@ -1445,18 +1620,12 @@
             showToast('只有项目创建者才能删除模块', true);
             return;
         }
-
-        const currentMemberId = getCurrentMemberId();
-        if (!currentMemberId) {
-            showToast('请先在左下角切换当前视角成员', true);
-            return;
-        }
         if (!window.confirm('确认删除该模块吗？')) {
             return;
         }
 
         try {
-            const response = await fetch(`/modules/${editingModuleId}?current_member_id=${currentMemberId}`, {
+            const response = await fetch(`/modules/${editingModuleId}`, {
                 method: 'DELETE'
             });
             if (!response.ok) {
@@ -1489,16 +1658,11 @@
         }
 
         const form = event.currentTarget;
-        const currentMemberId = getCurrentMemberId();
         const startMode = getSelectedAssessmentMode();
         const startAtValue = form.start_at.value;
         const durationHours = getSelectedDurationHours();
         const startAt = startMode === 'scheduled' ? parseDatetimeLocalValue(startAtValue) : null;
 
-        if (!currentMemberId) {
-            showToast('请先在左下角切换当前视角成员', true);
-            return;
-        }
         if (!['immediate', 'scheduled'].includes(startMode)) {
             showToast('开始方式不合法', true);
             return;
@@ -1523,7 +1687,7 @@
         };
 
         try {
-            const response = await fetch(`/projects/{{ project.id }}/assessment-period?current_member_id=${currentMemberId}`, {
+            const response = await fetch(`/projects/{{ project.id }}/assessment-period`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -1563,13 +1727,7 @@
             return;
         }
 
-        const currentMemberId = getCurrentMemberId();
-        if (!currentMemberId) {
-            showToast('请先在左下角切换当前视角成员', true);
-            return;
-        }
-
-        const response = await fetch(`/projects/{{ project.id }}/members/${memberId}?current_member_id=${currentMemberId}`, {
+        const response = await fetch(`/projects/{{ project.id }}/members/${memberId}`, {
             method: 'DELETE'
         });
         const data = await response.json();
@@ -1859,11 +2017,6 @@
             return;
         }
 
-        const currentMemberId = getCurrentMemberId();
-        if (!currentMemberId) {
-            showToast('请先在左下角切换当前视角成员', true);
-            return;
-        }
         if (!isProjectManager()) {
             showToast('只有项目创建者才能确认批量分配', true);
             return;
@@ -1872,7 +2025,7 @@
         const assignments = buildAssignmentsFromPreview(batchAssignmentPreview);
 
         try {
-            const response = await fetch(`/assignments/batch/{{ project.id }}/confirm?current_member_id=${currentMemberId}`, {
+            const response = await fetch(`/assignments/batch/{{ project.id }}/confirm`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ assignments })
@@ -1920,11 +2073,6 @@
             return;
         }
 
-        const currentMemberId = getCurrentMemberId();
-        if (!currentMemberId) {
-            showToast('请先在左下角切换当前视角成员', true);
-            return;
-        }
         if (!isProjectManager()) {
             showToast('只有项目创建者才能确认开工', true);
             return;
@@ -1940,7 +2088,7 @@
         }
 
         try {
-            const response = await fetch(`/assignments/batch/{{ project.id }}/confirm?current_member_id=${currentMemberId}`, {
+            const response = await fetch(`/assignments/batch/{{ project.id }}/confirm`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ assignments })
@@ -2089,7 +2237,7 @@
     }
 
     document.addEventListener('click', function (event) {
-        const overlays = ['add-module-modal', 'add-member-modal', 'assessment-period-modal'];
+        const overlays = ['add-module-modal', 'assessment-period-modal'{% if is_project_manager %}, 'invite-member-modal'{% endif %}];
         overlays.forEach((id) => {
             const overlay = document.getElementById(id);
             if (event.target === overlay) {
@@ -2116,6 +2264,8 @@
 </script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        sanitizeIdentityQueryParams();
+
         document.addEventListener('keydown', function (event) {
             if (event.key === 'Shift') {
                 isShiftSelectionActive = true;
@@ -2154,11 +2304,9 @@
         if (assessmentDurationCustom) {
             assessmentDurationCustom.addEventListener('input', updateAssessmentPeriodFormState);
         }
-        window.addEventListener('storage', function (event) {
-            if (event.key === 'current_member_id') {
-                updateCurrentMemberHighlight();
-                updateManagerActions();
-            }
+        window.addEventListener('session-context-ready', function () {
+            updateCurrentMemberHighlight();
+            updateManagerActions();
         });
 
         document.querySelectorAll('#project-member-list article[data-member-id]').forEach((card) => {
@@ -2464,17 +2612,8 @@
                 return;
             }
 
-            const currentMemberId = getCurrentMemberId();
-            if (!currentMemberId) {
-                connections = connections.filter((item) => connectionKey(item.from, item.to) !== key);
-                selectedConnectionKey = null;
-                renderConnections();
-                showToast('请先在左下角切换当前视角成员', true);
-                return;
-            }
-
             try {
-                const response = await fetch(`/projects/${projectId}/dependencies?current_member_id=${currentMemberId}`, {
+                const response = await fetch(`/projects/${projectId}/dependencies`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -2748,19 +2887,8 @@
                     return;
                 }
 
-                const currentMemberId = getCurrentMemberId();
-                if (!currentMemberId) {
-                    if (targetConnection) {
-                        connections.push(targetConnection);
-                    }
-                    selectedConnectionKey = deletedKey;
-                    renderConnections();
-                    showToast('请先在左下角切换当前视角成员', true);
-                    return;
-                }
-
                 try {
-                    const response = await fetch(`/projects/${projectId}/dependencies/${persistedConnection.id}?current_member_id=${currentMemberId}`, {
+                    const response = await fetch(`/projects/${projectId}/dependencies/${persistedConnection.id}`, {
                         method: 'DELETE'
                     });
                     if (!response.ok) {

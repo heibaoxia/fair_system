@@ -561,7 +561,7 @@
 {% endblock %}
 
 {% block content %}
-{% set stats = namespace(ongoing=0, completed=0, preparing=0, member_ids=[]) %}
+{% set stats = namespace(ongoing=0, completed=0, preparing=0, team_member_pool=[]) %}
 {% for project in projects %}
     {% if project.status == "进行中" %}
         {% set stats.ongoing = stats.ongoing + 1 %}
@@ -572,8 +572,8 @@
     {% endif %}
 
     {% for member in project.members %}
-        {% if member.id not in stats.member_ids %}
-            {% set stats.member_ids = stats.member_ids + [member.id] %}
+        {% if member.id not in stats.team_member_pool %}
+            {% set stats.team_member_pool = stats.team_member_pool + [member.id] %}
         {% endif %}
     {% endfor %}
 {% endfor %}
@@ -587,7 +587,7 @@
             <a href="/members" class="ghost-link">管理团队成员</a>
             <a href="/todo" class="ghost-link">进入我的待办</a>
         </div>
-        <div id="god-mode-banner" class="god-mode-banner" hidden>当前：上帝视角，可右键项目卡片删除</div>
+        <div id="god-mode-banner" class="god-mode-banner" hidden>当前：上帝视角，请先切换到业务身份后再执行项目管理操作</div>
     </section>
 
     <section class="stats-grid">
@@ -608,7 +608,7 @@
         </article>
         <article class="stat-card">
             <div class="stat-label">👥 团队成员数</div>
-            <div class="stat-value" id="member-count" data-fallback="{{ stats.member_ids | length }}">{{ stats.member_ids | length }}</div>
+            <div class="stat-value" id="member-count" data-fallback="{{ stats.team_member_pool | length }}">{{ stats.team_member_pool | length }}</div>
             <div class="stat-note">通过成员接口动态获取最新人数。</div>
         </article>
     </section>
@@ -620,7 +620,7 @@
                 <p>当前成员切换到 PM 后，可在这里一次性设置项目名、模块、评分维度和权重。</p>
             </div>
             <div class="quick-action-row">
-                <button type="button" class="btn btn-primary" onclick="openCreateProjectModal()">+ 新建项目</button>
+                <button type="button" data-create-project-action class="btn btn-primary" onclick="openCreateProjectModal()">+ 新建项目</button>
             </div>
         </article>
         <article class="panel quick-action">
@@ -667,7 +667,7 @@
                     {% endif %}
                 {% endfor %}
                 {% set progress_pct = (module_stats.completed / total_modules * 100) if total_modules else 0 %}
-                <a href="/project/{{ project.id }}" class="project-item card" data-project-id="{{ project.id }}" data-project-name="{{ project.name }}">
+                <a href="/project/{{ project.id }}" class="project-item card" data-project-id="{{ project.id }}" data-project-name="{{ project.name }}" data-project-owner-id="{{ project.created_by }}">
                     <div class="project-top">
                         <div>
                             <div class="project-name">{{ project.name }}</div>
@@ -768,7 +768,7 @@
 
             <p class="status-caption" style="margin-top: 18px;">项目数量由模板直接根据 `projects` 计算，成员数则在页面加载后通过 `/members/` 动态获取。</p>
 
-            {% if stats.member_ids | length > 0 %}
+            {% if stats.team_member_pool | length > 0 %}
             <div class="team-pill-list">
                 {% for project in projects[:4] %}
                 <span class="team-pill">{{ project.name }} · {{ project.members | length }} 人</span>
@@ -846,6 +846,51 @@
 
 <script>
     let contextProjectTarget = null;
+
+    function getSessionContextSnapshot() {
+        try {
+            return sessionContext && typeof sessionContext === 'object' ? sessionContext : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function hasBusinessIdentity() {
+        const context = getSessionContextSnapshot();
+        const actingMemberId = Number(context && context.acting_member ? context.acting_member.id : 0);
+        return Number.isInteger(actingMemberId) && actingMemberId > 0;
+    }
+
+    function hasProjectDeleteCapability(projectCard) {
+        if (!projectCard) {
+            return false;
+        }
+
+        const currentMemberId = getCurrentMemberId();
+        const projectOwnerId = Number(projectCard.dataset.projectOwnerId || 0);
+        return Number.isInteger(currentMemberId)
+            && currentMemberId > 0
+            && Number.isInteger(projectOwnerId)
+            && projectOwnerId > 0
+            && currentMemberId === projectOwnerId;
+    }
+
+    function sanitizeIdentityQueryParams() {
+        const url = new URL(window.location.href);
+        if (!url.search) {
+            return;
+        }
+
+        const cleanUrl = `${url.pathname}${url.hash || ''}`;
+        window.history.replaceState({}, '', cleanUrl);
+    }
+
+    function updateProjectActionsVisibility() {
+        const canCreateProject = hasBusinessIdentity();
+        document.querySelectorAll('[data-create-project-action]').forEach((button) => {
+            button.style.display = canCreateProject ? '' : 'none';
+        });
+    }
 
     function updateCurrentPmField() {
         const currentPmField = document.getElementById('create-project-current-pm');
@@ -986,8 +1031,7 @@
     }
 
     function openCreateProjectModal() {
-        const currentMemberId = getCurrentMemberId();
-        if (currentMemberId === null || currentMemberId <= 0) {
+        if (!hasBusinessIdentity()) {
             showToast('请先切换到一个 PM 成员，再创建项目。', true);
             return;
         }
@@ -1084,8 +1128,7 @@
     async function submitCreateProjectForm(event) {
         event.preventDefault();
 
-        const currentMemberId = getCurrentMemberId();
-        if (currentMemberId === null || currentMemberId <= 0) {
+        if (!hasBusinessIdentity()) {
             showToast('当前成员不是可创建项目的 PM，请先切换成员。', true);
             return;
         }
@@ -1108,7 +1151,7 @@
                 scoring_dimensions: collectScoringDimensions(),
             };
 
-            const response = await fetch(`/projects/?created_by_member_id=${currentMemberId}`, {
+            const response = await fetch('/projects/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -1173,8 +1216,13 @@
         menu.style.top = `${Math.min(event.clientY, maxTop)}px`;
     }
 
-    async function deleteProjectAsGod() {
+    async function deleteProjectFromCard() {
         if (!contextProjectTarget) {
+            return;
+        }
+
+        if (!hasProjectDeleteCapability(contextProjectTarget)) {
+            showToast('当前身份没有删除该项目的权限。', true);
             return;
         }
 
@@ -1187,7 +1235,7 @@
         }
 
         try {
-            const response = await fetch(`/projects/${projectId}?current_member_id=0`, {
+            const response = await fetch(`/projects/${projectId}`, {
                 method: 'DELETE'
             });
 
@@ -1216,7 +1264,7 @@
 
         cards.forEach((card) => {
             card.addEventListener('contextmenu', (event) => {
-                if (!isGodMode()) {
+                if (!hasProjectDeleteCapability(card)) {
                     return;
                 }
                 event.preventDefault();
@@ -1225,7 +1273,7 @@
         });
 
         if (deleteAction) {
-            deleteAction.addEventListener('click', deleteProjectAsGod);
+            deleteAction.addEventListener('click', deleteProjectFromCard);
         }
 
         document.addEventListener('click', (event) => {
@@ -1239,13 +1287,17 @@
 
         window.addEventListener('scroll', hideProjectContextMenu, true);
         window.addEventListener('resize', hideProjectContextMenu);
-        window.addEventListener('storage', () => {
+        window.addEventListener('session-context-ready', () => {
+            updateProjectActionsVisibility();
+            updateCurrentPmField();
             updateGodModeBanner();
             hideProjectContextMenu();
         });
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        sanitizeIdentityQueryParams();
+
         const createProjectForm = document.getElementById('create-project-form');
         if (createProjectForm) {
             createProjectForm.addEventListener('submit', submitCreateProjectForm);
@@ -1261,6 +1313,7 @@
         }
 
         loadDashboardMemberCount();
+        updateProjectActionsVisibility();
         updateCurrentPmField();
         updateGodModeBanner();
         bindProjectContextMenu();

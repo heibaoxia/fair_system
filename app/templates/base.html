@@ -1,347 +1,915 @@
 <!DOCTYPE html>
+
 <html lang="zh-CN">
 
+
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>{% block title %}Fair-System{% endblock %}</title>
 
+
+
     <!-- Google Fonts Preconnect -->
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
+
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
     <link
+
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&display=swap"
+
         rel="stylesheet">
 
+
+
     <!-- Global Stylesheet -->
+
     <link rel="stylesheet" href="/static/style.css">
 
+
+
     <!-- SortableJS for drag-and-drop features -->
+
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
+
+
     {% block extra_css %}{% endblock %}
+
     <style>
+
         .sidebar-link-main {
+
             display: inline-flex;
+
             align-items: center;
+
             gap: 8px;
+
             min-width: 0;
+
         }
+
+
 
         .sidebar-link-with-badge {
+
             justify-content: space-between;
+
             gap: 12px;
+
         }
+
+
 
         .nav-badge {
+
             display: inline-flex;
+
             align-items: center;
+
             justify-content: center;
+
             min-width: 18px;
+
             height: 18px;
+
             padding: 0 6px;
+
             border-radius: 999px;
+
             background: #dc2626;
+
             color: #ffffff;
+
             font-size: 11px;
+
             font-weight: 700;
+
             line-height: 1;
+
             flex-shrink: 0;
+
         }
+
+
 
         .nav-badge[hidden] {
+
             display: none;
+
         }
+
     </style>
+
 </head>
 
+
+
 <body>
+
     <div class="app-container">
 
+
+
         <!-- ===================== Sidebar Navigation ===================== -->
+
         <aside class="sidebar" id="app-sidebar">
+
             <div class="sidebar-logo">
+
                 Fair-<span>System</span>
+
             </div>
+
+
 
             <nav class="sidebar-nav" id="sidebar-nav">
+
                 <a href="/" class="sidebar-link" data-path="/">
+
                     <span class="sidebar-link-main"><span class="nav-icon">🏠</span><span>首页</span></span>
+
                 </a>
+
                 <a href="/members" class="sidebar-link" data-path="/members">
+
                     <span class="sidebar-link-main"><span class="nav-icon">👥</span><span>成员管理</span></span>
+
                 </a>
+
+                <a href="/social" class="sidebar-link" data-path="/social">
+
+                    <span class="sidebar-link-main"><span class="nav-icon">@</span><span>Social</span></span>
+
+                </a>
+
                 <a href="/overview" class="sidebar-link" data-path="/overview">
+
                     <span class="sidebar-link-main"><span class="nav-icon">📊</span><span>项目总览</span></span>
+
                 </a>
+
                 <a href="/todo" class="sidebar-link sidebar-link-with-badge" data-path="/todo">
+
                     <span class="sidebar-link-main"><span class="nav-icon">📋</span><span>我的待办</span></span>
+
                     <span id="todo-nav-badge" class="nav-badge" hidden aria-label="待办项目数"></span>
+
                 </a>
+
             </nav>
 
-            <!-- Identity Switcher (bottom of sidebar) -->
+
+
             <div class="sidebar-identity"
+
                 style="margin-top: auto; padding-top: 1.5rem; border-top: 1px solid var(--border-light);">
-                <label for="global-identity-selector"
-                    style="display:block; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
-                    当前视角
-                </label>
-                <select id="global-identity-selector" onchange="switchIdentity(this.value)" class="input-field"
-                    style="font-size: 0.875rem; padding: 0.5rem 0.75rem; border-radius: var(--radius-md); cursor: pointer;">
-                    <option value="">加载中...</option>
-                </select>
+
+                <div id="session-identity-summary" style="display:flex; flex-direction:column; gap:0.25rem;">
+
+                    <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
+
+                        Session
+
+                    </span>
+
+                    <strong id="session-identity-name" style="font-size: 0.9rem;">-</strong>
+
+                    <span id="session-account-login" style="font-size: 0.75rem; color: var(--text-muted);">-</span>
+
+                </div>
+
+
+
+                <div id="identity-switcher-wrapper" hidden style="margin-top: 0.75rem;">
+
+                    <label for="global-identity-selector"
+
+                        style="display:block; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
+
+                        Identity
+
+                    </label>
+
+                    <select id="global-identity-selector" onchange="switchIdentity(this.value)" class="input-field"
+
+                        style="font-size: 0.875rem; padding: 0.5rem 0.75rem; border-radius: var(--radius-md); cursor: pointer;">
+
+                        <option value="">Loading...</option>
+
+                    </select>
+
+                </div>
+
+
+
+                <button id="logout-button" type="button" class="btn btn-secondary"
+
+                    style="width: 100%; margin-top: 0.9rem; padding: 0.5rem 0.75rem;">
+
+                    Logout
+
+                </button>
+
             </div>
+
         </aside>
 
+
+
         <!-- ===================== Main Content Area ===================== -->
+
         <div class="main-content">
+
             {% block content %}{% endblock %}
+
         </div>
+
+
 
     </div><!-- /.app-container -->
 
+
+
     <!-- ===================== Toast Notification Container ===================== -->
+
     <div class="toast-container" id="toast-container" aria-live="polite"></div>
 
+
+
     <!-- ===================== Global JS ===================== -->
+
     <script>
-        // -----------------------------------------------
-        // Toast Notification
-        // -----------------------------------------------
+
         function showToast(message, isError = false) {
+
             const container = document.getElementById('toast-container');
+
             const toast = document.createElement('div');
 
-            // Determine type class
             const typeClass = isError ? 'error' : 'success';
-            const icon = isError ? '✕' : '✓';
+
+            const icon = isError ? '!' : '+';
+
+
 
             toast.className = `toast ${typeClass}`;
+
             toast.innerHTML = `<strong style="margin-right: 8px;">${icon}</strong> ${message}`;
 
             container.appendChild(toast);
 
-            // Trigger slide-in animation
+
+
             requestAnimationFrame(() => {
+
                 requestAnimationFrame(() => toast.classList.add('show'));
+
             });
 
-            // Auto-remove after 3.5 seconds
+
+
             setTimeout(() => {
+
                 toast.classList.remove('show');
+
                 toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+
             }, 3500);
+
         }
+
+
 
         function formatApiErrorDetail(detail) {
+
             if (!detail) {
+
                 return '';
+
             }
+
             if (typeof detail === 'string') {
+
                 return detail;
+
             }
+
             if (Array.isArray(detail)) {
+
                 return detail.map((item) => {
+
                     if (typeof item === 'string') {
+
                         return item;
+
                     }
+
                     if (item && typeof item === 'object') {
+
                         const location = Array.isArray(item.loc) ? item.loc.join('.') : '';
+
                         if (item.msg && location) {
+
                             return `${location}: ${item.msg}`;
+
                         }
+
                         if (item.msg) {
+
                             return item.msg;
+
                         }
+
                     }
+
                     return String(item);
-                }).join('；');
+
+                }).join('; ');
+
             }
+
             if (typeof detail === 'object') {
+
                 return detail.message || detail.detail || JSON.stringify(detail);
+
             }
+
             return String(detail);
+
         }
+
+
 
         function getApiErrorMessage(data, fallbackMessage) {
+
             if (!data) {
+
                 return fallbackMessage;
+
             }
+
             return formatApiErrorDetail(data.detail || data.message || data) || fallbackMessage;
+
         }
 
-        // -----------------------------------------------
-        // Sidebar Active Link Highlighting
-        // -----------------------------------------------
+
+
         function highlightActiveNav() {
+
             const currentPath = window.location.pathname;
+
             const links = document.querySelectorAll('#sidebar-nav .sidebar-link');
 
-            links.forEach(link => {
+
+
+            links.forEach((link) => {
+
                 const linkPath = link.getAttribute('data-path');
 
-                // Exact match for root, prefix match for others
-                const isActive = linkPath === '/'
-                    ? currentPath === '/'
-                    : currentPath.startsWith(linkPath);
+                const isActive = linkPath === '/' ? currentPath === '/' : currentPath.startsWith(linkPath);
 
-                if (isActive) {
-                    link.classList.add('active');
-                } else {
-                    link.classList.remove('active');
-                }
+                link.classList.toggle('active', isActive);
+
             });
+
         }
 
-        // -----------------------------------------------
-        // Global Identity Management
-        // -----------------------------------------------
+
+
         let pendingBadgeRequestToken = 0;
 
-        async function loadGlobalIdentities() {
-            try {
-                const res = await fetch('/members/');
-                const members = await res.json();
-                const selector = document.getElementById('global-identity-selector');
-                selector.innerHTML = '';
+        let sessionContext = null;
 
-                const godOption = document.createElement('option');
-                godOption.value = '0';
-                godOption.textContent = '上帝（超级管理）';
-                selector.appendChild(godOption);
 
-                let savedId = localStorage.getItem('current_member_id');
-                let foundSaved = savedId === '0';
 
-                if (savedId === '0') {
-                    godOption.selected = true;
-                }
+        function toRedirectablePath() {
 
-                members.forEach(m => {
-                    const opt = document.createElement('option');
-                    opt.value = m.id;
-                    opt.textContent = `${m.name}（${m.role || '成员'}）`;
-                    selector.appendChild(opt);
+            const path = `${window.location.pathname}${window.location.search || ''}`;
 
-                    if (savedId && savedId == m.id) {
-                        opt.selected = true;
-                        foundSaved = true;
-                    }
-                });
+            return path.startsWith('/') ? path : '/';
 
-                // Default to first member if no saved identity found
-                if (!foundSaved && members.length > 0) {
-                    selector.selectedIndex = 0;
-                    switchIdentity(members[0].id, members[0].name);
-                    return;
-                }
-
-                syncTodoLinks();
-                loadPendingTodoBadge();
-            } catch (err) {
-                console.error('无法加载成员身份列表', err);
-            }
         }
 
-        function switchIdentity(memberId, memberName) {
-            if (memberId === null || memberId === undefined || memberId === '') return;
-            const normalizedMemberId = String(memberId);
-            localStorage.setItem('current_member_id', normalizedMemberId);
 
-            const selector = document.getElementById('global-identity-selector');
-            const name = memberName || selector.options[selector.selectedIndex]?.text;
-            if (name) localStorage.setItem('current_member_name', name);
 
-            showToast(`已切换视角：${name || memberId}`);
+        function redirectToLogin() {
 
-            syncTodoLinks();
-            loadPendingTodoBadge();
+            const target = encodeURIComponent(toRedirectablePath());
 
-            // Reload after a short delay so the toast is visible
-            if (window.location.pathname === '/todo') {
-                setTimeout(() => {
-                    window.location.href = `/todo?member_id=${normalizedMemberId}`;
-                }, 600);
-                return;
-            }
+            window.location.replace(`/login?next=${target}`);
 
-            if (!memberName) {
-                setTimeout(() => window.location.reload(), 600);
-            }
         }
+
+
+
+        function isPositiveInteger(value) {
+
+            return Number.isInteger(value) && value > 0;
+
+        }
+
+
+
+        function normalizeActiveMemberId(context) {
+
+            if (!context || typeof context !== 'object') {
+
+                return null;
+
+            }
+
+
+
+            const actingMemberId = context.acting_member && Number(context.acting_member.id);
+
+            if (isPositiveInteger(actingMemberId)) {
+
+                return actingMemberId;
+
+            }
+
+
+
+            if (context.account && context.account.is_super_account) {
+
+                return 0;
+
+            }
+
+            return null;
+
+        }
+
+
 
         function getCurrentMemberId() {
-            const rawValue = localStorage.getItem('current_member_id');
-            if (rawValue === null || rawValue === '') {
-                return null;
-            }
 
-            const parsed = parseInt(rawValue, 10);
-            return Number.isNaN(parsed) ? null : parsed;
+            return normalizeActiveMemberId(sessionContext);
+
         }
 
+
+
+        function isGodMode() {
+
+            return getCurrentMemberId() === 0;
+
+        }
+
+
+
+        const SUPER_TEST_ACCOUNT_LABEL = '测试超级号';
+
+        const SUPER_TEST_MODE_LABEL = '测试视角 / super test mode';
+
+
+
+        function getSuperTestIdentityLabel() {
+
+            return `${SUPER_TEST_ACCOUNT_LABEL}（${SUPER_TEST_MODE_LABEL}）`;
+
+        }
+
+
+
+        function setSessionSummary(context) {
+
+            const identityNameEl = document.getElementById('session-identity-name');
+
+            const accountLoginEl = document.getElementById('session-account-login');
+
+            if (!identityNameEl || !accountLoginEl) {
+
+                return;
+
+            }
+
+
+
+            const actingMember = context && context.acting_member ? context.acting_member : null;
+
+            const accountLoginId = context && context.account ? context.account.login_id : '-';
+
+
+
+            if (actingMember && actingMember.name) {
+
+                identityNameEl.textContent = actingMember.name;
+
+            } else if (context && context.account && context.account.is_super_account) {
+
+                identityNameEl.textContent = SUPER_TEST_ACCOUNT_LABEL;
+
+            } else if (context && context.bound_member && context.bound_member.name) {
+
+                identityNameEl.textContent = context.bound_member.name;
+
+            } else {
+
+                identityNameEl.textContent = '-';
+
+            }
+
+            if (context && context.account && !context.account.is_super_account && isPositiveInteger(Number(context.account.id))) {
+
+                const loginSuffix = accountLoginId && accountLoginId !== '-' ? ` · @${accountLoginId}` : '';
+
+                accountLoginEl.textContent = `账户ID #${context.account.id}${loginSuffix}`;
+
+            } else if (context && context.account && context.account.is_super_account) {
+
+                const loginSuffix = accountLoginId && accountLoginId !== '-' ? ` · @${accountLoginId}` : '';
+
+                accountLoginEl.textContent = `${SUPER_TEST_MODE_LABEL}${loginSuffix}`;
+
+            } else if (accountLoginId && accountLoginId !== '-') {
+
+                accountLoginEl.textContent = `@${accountLoginId}`;
+
+            } else {
+
+                accountLoginEl.textContent = '-';
+
+            }
+
+        }
+
+
+
+        function buildIdentityOption(label, value, selectedValue) {
+
+            const option = document.createElement('option');
+
+            option.value = String(value);
+
+            option.textContent = label;
+
+            option.selected = String(value) === String(selectedValue);
+
+            return option;
+
+        }
+
+
+
+        function setIdentitySwitcher(context) {
+
+            const wrapper = document.getElementById('identity-switcher-wrapper');
+
+            const selector = document.getElementById('global-identity-selector');
+
+            if (!wrapper || !selector) {
+
+                return;
+
+            }
+
+
+
+            const canSwitchIdentity = Boolean(
+                context && context.can_switch_identity && context.account && context.account.is_super_account,
+            );
+            wrapper.hidden = !canSwitchIdentity;
+
+            selector.disabled = !canSwitchIdentity;
+
+            selector.innerHTML = '';
+
+
+
+            if (!canSwitchIdentity) {
+
+                selector.appendChild(buildIdentityOption('Own Identity', '', ''));
+
+                return;
+
+            }
+
+
+
+            const selectedMemberId = getCurrentMemberId();
+
+            selector.appendChild(buildIdentityOption(getSuperTestIdentityLabel(), 0, selectedMemberId));
+
+
+
+            const seen = new Set();
+
+            const appendIdentity = (member, sourceLabel) => {
+
+                if (!member || !isPositiveInteger(Number(member.id)) || seen.has(member.id)) {
+
+                    return;
+
+                }
+
+                seen.add(member.id);
+
+                selector.appendChild(
+
+                    buildIdentityOption(`${member.name} (#${member.id}) - ${sourceLabel}`, member.id, selectedMemberId),
+
+                );
+
+            };
+
+
+
+            const pools = (context && context.available_identities) || {};
+
+            (pools.own_identities || []).forEach((member) => appendIdentity(member, 'own'));
+
+            (pools.global_identities || []).forEach((member) => appendIdentity(member, 'global'));
+
+            (pools.test_identities || []).forEach((member) => appendIdentity(member, 'test'));
+
+        }
+
+
+
         function syncTodoLinks() {
-            const currentMemberId = getCurrentMemberId();
             document.querySelectorAll('a[href="/todo"], a[data-path="/todo"]').forEach((link) => {
-                link.href = currentMemberId !== null ? `/todo?member_id=${currentMemberId}` : '/todo';
+                link.href = '/todo';
             });
         }
 
-        function isGodMode() {
-            return getCurrentMemberId() === 0;
+
+        function applySessionContext(context) {
+
+            sessionContext = context;
+
+            setSessionSummary(context);
+
+            setIdentitySwitcher(context);
+
+            syncTodoLinks();
+
+            loadPendingTodoBadge();
+
+            window.dispatchEvent(new CustomEvent('session-context-ready', { detail: { sessionContext: context } }));
+
         }
 
-        async function loadPendingTodoBadge() {
-            const badge = document.getElementById('todo-nav-badge');
-            if (!badge) {
+
+
+        function requestSessionContextSync() {
+
+            const request = new XMLHttpRequest();
+
+            request.open('GET', '/auth/me', false);
+
+            request.send(null);
+
+            if (request.status === 200) {
+
+                return JSON.parse(request.responseText || '{}');
+
+            }
+
+            if (request.status === 401) {
+
+                return null;
+
+            }
+
+            throw new Error(`unexpected status: ${request.status}`);
+
+        }
+
+
+
+        function bootstrapSessionContext() {
+
+            try {
+
+                const context = requestSessionContextSync();
+
+                if (!context || !context.authenticated) {
+
+                    redirectToLogin();
+
+                    return;
+
+                }
+
+                applySessionContext(context);
+
+            } catch (error) {
+
+                console.error('failed to bootstrap session context', error);
+
+                redirectToLogin();
+
+            }
+
+        }
+
+
+
+        async function switchIdentity(memberId) {
+
+            if (
+                !sessionContext
+                || !sessionContext.can_switch_identity
+                || !sessionContext.account
+                || !sessionContext.account.is_super_account
+            ) {
                 return;
             }
 
-            const currentMemberId = getCurrentMemberId();
-            if (currentMemberId === null || currentMemberId <= 0) {
-                badge.hidden = true;
-                badge.textContent = '';
+
+            const normalized = String(memberId ?? '').trim();
+
+            const nextMemberId = normalized === '0' ? null : Number(normalized);
+
+            if (normalized !== '0' && !isPositiveInteger(nextMemberId)) {
+
                 return;
+
             }
+
+
+
+            try {
+
+                const response = await fetch('/auth/switch-identity', {
+
+                    method: 'POST',
+
+                    headers: { 'Content-Type': 'application/json' },
+
+                    body: JSON.stringify({ acting_member_id: nextMemberId }),
+
+                });
+
+                const payload = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+
+                    throw new Error(getApiErrorMessage(payload, 'Switch identity failed.'));
+
+                }
+
+
+
+                applySessionContext(payload);
+
+                const identityName = payload.acting_member ? payload.acting_member.name : getSuperTestIdentityLabel();
+
+                showToast(`Switched identity to ${identityName}.`);
+
+                setTimeout(() => window.location.reload(), 500);
+
+            } catch (error) {
+
+                showToast(error.message || 'Switch identity failed.', true);
+
+            }
+
+        }
+
+
+
+        async function logoutAndRedirect() {
+
+            const logoutButton = document.getElementById('logout-button');
+
+            if (logoutButton) {
+
+                logoutButton.disabled = true;
+
+            }
+
+
+
+            try {
+
+                await fetch('/auth/logout', { method: 'POST' });
+
+            } catch (error) {
+
+                console.error('logout request failed', error);
+
+            } finally {
+
+                window.location.replace('/login');
+
+            }
+
+        }
+
+
+
+        async function loadPendingTodoBadge() {
+
+            const badge = document.getElementById('todo-nav-badge');
+
+            if (!badge) {
+
+                return;
+
+            }
+
+
+
+            const currentMemberId = getCurrentMemberId();
+
+            if (currentMemberId === null || currentMemberId <= 0) {
+
+                badge.hidden = true;
+
+                badge.textContent = '';
+
+                return;
+
+            }
+
+
 
             const requestToken = ++pendingBadgeRequestToken;
 
+
+
             try {
-                const response = await fetch(`/notifications/pending-assessments/${currentMemberId}`);
+
+                const response = await fetch('/notifications/pending-assessments');
                 if (!response.ok) {
+
                     throw new Error('failed to load notifications');
+
                 }
+
+
 
                 const data = await response.json();
+
                 if (requestToken !== pendingBadgeRequestToken || getCurrentMemberId() !== currentMemberId) {
+
                     return;
+
                 }
+
+
 
                 const count = Number(data.pending_project_count || 0);
+
                 badge.hidden = count <= 0;
+
                 badge.textContent = count > 0 ? String(count) : '';
+
             } catch (error) {
+
                 if (requestToken !== pendingBadgeRequestToken) {
+
                     return;
+
                 }
+
                 badge.hidden = true;
+
                 badge.textContent = '';
+
             }
+
         }
 
-        // -----------------------------------------------
-        // Init
-        // -----------------------------------------------
+
+
+        highlightActiveNav();
+
+        bootstrapSessionContext();
+
+
+
         document.addEventListener('DOMContentLoaded', () => {
-            highlightActiveNav();
-            loadGlobalIdentities();
-            syncTodoLinks();
-            loadPendingTodoBadge();
+
+            const logoutButton = document.getElementById('logout-button');
+
+            if (logoutButton) {
+
+                logoutButton.addEventListener('click', logoutAndRedirect);
+
+            }
+
         });
+
     </script>
 
+
+
     {% block extra_js %}{% endblock %}
+
 </body>
 
+
+
 </html>
+

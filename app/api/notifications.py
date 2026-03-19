@@ -3,17 +3,17 @@ Fair-System 通知 API
 查询成员的待打分模块列表，为待办页面提供数据。
 """
 from datetime import datetime
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import models
-from app.api.dependencies import get_db
+from app.api.dependencies import CurrentMemberContext, get_current_member_context, get_db
+from app.api.project_access import require_business_member
 
 router = APIRouter(prefix="/notifications", tags=["通知"])
 
 
-@router.get("/pending-assessments/{member_id}")
-def get_pending_assessments(member_id: int, db: Session = Depends(get_db)):
+def _build_pending_assessments(member_id: int, db: Session):
     """
     **查询某成员的待打分模块列表**：
     1. 查找该成员参与的所有项目
@@ -101,3 +101,28 @@ def get_pending_assessments(member_id: int, db: Session = Depends(get_db)):
         "total_expired": len([p for p in pending_list if p["is_expired"]]),
         "pending_project_count": len(pending_project_ids),
     }
+
+
+def get_pending_assessments_for_member(member_id: int, db: Session):
+    return _build_pending_assessments(member_id, db)
+
+
+@router.get("/pending-assessments")
+def get_pending_assessments(
+    db: Session = Depends(get_db),
+    context: CurrentMemberContext = Depends(get_current_member_context),
+):
+    member = require_business_member(context, "请选择当前业务身份后再查看待办。")
+    return _build_pending_assessments(member.id, db)
+
+
+@router.get("/pending-assessments/{member_id}")
+def get_pending_assessments_by_member_id(
+    member_id: int,
+    db: Session = Depends(get_db),
+    context: CurrentMemberContext = Depends(get_current_member_context),
+):
+    member = require_business_member(context, "请选择当前业务身份后再查看待办。")
+    if member.id != member_id:
+        raise HTTPException(status_code=403, detail="禁止读取其他成员的待评分列表。")
+    return _build_pending_assessments(member.id, db)

@@ -4,21 +4,33 @@ Fair-System 评估 API 路由
 """
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import List
 
 from app import models, schemas
-from app.api.dependencies import get_db
+from app.api.dependencies import CurrentMemberContext, get_current_member_context, get_db
+from app.api.project_access import require_business_member
 
 router = APIRouter(prefix="/assessments", tags=["模块评估"])
 
+
+class AssessmentSubmitPayload(BaseModel):
+    module_id: int
+    dimension_scores: List[schemas.DimensionScoreCreate] = Field(default_factory=list)
+
+
 @router.post("/", response_model=schemas.ModuleAssessment)
-def create_assessment(assessment: schemas.AssessmentCreate, db: Session = Depends(get_db)):
+def create_assessment(
+    assessment: AssessmentSubmitPayload,
+    db: Session = Depends(get_db),
+    context: CurrentMemberContext = Depends(get_current_member_context),
+):
     """
     **业务逻辑说明**：
     成员对某个未完成的模块进行“评估”。提交打分、预估工时等。
     1. 检查模块存不存在？
-    2. 检查成员存不存在？
+    2. 从当前会话识别评分成员
     3. 检查这个成员是不是该模块所属项目的组员？
     4. 检查这个成员有没有**重复打分**？每个人对每个模块只能评一次！
     """
@@ -27,10 +39,17 @@ def create_assessment(assessment: schemas.AssessmentCreate, db: Session = Depend
     if not module:
         raise HTTPException(status_code=404, detail="想打分的模块不存在！")
 
-    # 步骤 2: 成员在不在？
-    member = db.query(models.Member).filter(models.Member.id == assessment.member_id).first()
-    if not member:
-        raise HTTPException(status_code=404, detail="提交评估的成员不存在！")
+    # 步骤 2: 成员必须来自当前会话业务身份
+    if isinstance(context, CurrentMemberContext):
+        member = require_business_member(context, "请选择当前业务身份后再评分。")
+    else:
+        # 兼容直接调用该函数的单元测试：允许显式传 member_id 进行非 HTTP 场景验证
+        legacy_member_id = getattr(assessment, "member_id", None)
+        if legacy_member_id is None:
+            raise HTTPException(status_code=401, detail="请先登录后再评分。")
+        member = db.query(models.Member).filter(models.Member.id == legacy_member_id).first()
+        if not member:
+            raise HTTPException(status_code=404, detail="提交评估的成员不存在！")
 
     # 步骤 3: 必须是该项目的组员才能评分
     project = db.query(models.Project).filter(models.Project.id == module.project_id).first()
@@ -55,7 +74,7 @@ def create_assessment(assessment: schemas.AssessmentCreate, db: Session = Depend
     # 步骤 4: 检查是否已经填过了？
     # [新手注意]：filter() 里面可以写多个条件！用逗号隔开代表“并且(AND)” 
     existing = db.query(models.ModuleAssessment).filter(
-        models.ModuleAssessment.member_id == assessment.member_id,
+        models.ModuleAssessment.member_id == member.id,
         models.ModuleAssessment.module_id == assessment.module_id
     ).first()
     
@@ -79,8 +98,8 @@ def create_assessment(assessment: schemas.AssessmentCreate, db: Session = Depend
          
     # 如果一切正常，创建评估数据
     new_assessment = models.ModuleAssessment(
-        member_id=assessment.member_id,               # 谁打的分？前端传
-        module_id=assessment.module_id,               # 哪个模块？前端传
+        member_id=member.id,               # 谁打的分？服务端注入
+        module_id=assessment.module_id,    # 哪个模块？前端传
     )
     
     db.add(new_assessment)

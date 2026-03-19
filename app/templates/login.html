@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Fair-System</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .auth-shell {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .auth-card {
+            width: min(480px, 100%);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            padding: 28px;
+        }
+
+        .auth-title {
+            margin-bottom: 8px;
+            font-size: 1.75rem;
+        }
+
+        .auth-subtitle,
+        .auth-help-copy,
+        .auth-hint,
+        .auth-login-note {
+            color: var(--text-muted);
+        }
+
+        .auth-subtitle {
+            margin-bottom: 16px;
+        }
+
+        .auth-banner {
+            border-radius: var(--radius-sm);
+            font-size: 0.92rem;
+            margin-bottom: 16px;
+            padding: 12px 14px;
+        }
+
+        .auth-banner--info {
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            background: rgba(59, 130, 246, 0.08);
+            color: #1d4ed8;
+        }
+
+        .auth-banner--success {
+            border: 1px solid rgba(34, 197, 94, 0.22);
+            background: rgba(34, 197, 94, 0.1);
+            color: #15803d;
+        }
+
+        .auth-banner--error {
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            background: rgba(239, 68, 68, 0.08);
+            color: #b91c1c;
+        }
+
+        .auth-form,
+        .auth-inline-form {
+            display: grid;
+            gap: 12px;
+        }
+
+        .auth-error {
+            display: none;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            background: rgba(239, 68, 68, 0.08);
+            color: #b91c1c;
+            font-size: 0.9rem;
+            padding: 10px 12px;
+        }
+
+        .auth-error.show {
+            display: block;
+        }
+
+        .auth-actions,
+        .auth-inline-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 8px;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .auth-hint a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .auth-hint a:hover {
+            text-decoration: underline;
+        }
+
+        .auth-help {
+            margin-top: 18px;
+            border-top: 1px solid var(--border-light);
+            padding-top: 18px;
+        }
+
+        .auth-help-title {
+            margin: 0 0 6px;
+            font-size: 1rem;
+        }
+
+        .auth-help-copy {
+            font-size: 0.88rem;
+            margin: 0 0 12px;
+        }
+
+        .auth-inline-message {
+            color: var(--text-muted);
+            font-size: 0.84rem;
+            min-height: 1.2em;
+        }
+
+        .auth-inline-message.is-success {
+            color: #15803d;
+        }
+
+        .auth-inline-message.is-error {
+            color: #b91c1c;
+        }
+
+        .auth-login-note {
+            font-size: 0.85rem;
+            margin: -4px 0 0;
+        }
+    </style>
+</head>
+<body>
+    {% set verification_state = request.query_params.get('verification', '') %}
+    {% set verification_reason = request.query_params.get('reason', '') %}
+    {% set hinted_login_id = request.query_params.get('login_id', '') %}
+    {% set hinted_email = request.query_params.get('email', '') %}
+    {% set verification_token = request.query_params.get('token', '') %}
+    {% if verification_state == 'pending' %}
+        {% set status_tone = 'info' %}
+        {% set status_message = 'Account created. Please verify your email before logging in.' %}
+    {% elif verification_state == 'verified' %}
+        {% set status_tone = 'success' %}
+        {% set status_message = 'Email verification succeeded. You can log in now.' %}
+    {% elif verification_state == 'resent' %}
+        {% set status_tone = 'success' %}
+        {% set status_message = 'A new verification email has been sent.' %}
+    {% elif verification_state == 'failed' and verification_reason == 'expired' %}
+        {% set status_tone = 'error' %}
+        {% set status_message = 'The verification link has expired. Request a new one below.' %}
+    {% elif verification_state == 'failed' and verification_reason == 'used' %}
+        {% set status_tone = 'error' %}
+        {% set status_message = 'That verification link was already used.' %}
+    {% elif verification_state == 'failed' %}
+        {% set status_tone = 'error' %}
+        {% set status_message = 'The verification link is invalid.' %}
+    {% elif verification_token %}
+        {% set status_tone = 'info' %}
+        {% set status_message = 'Verifying your email now. Please wait.' %}
+    {% else %}
+        {% set status_tone = '' %}
+        {% set status_message = '' %}
+    {% endif %}
+    <main class="auth-shell">
+        <section class="auth-card" aria-labelledby="login-title">
+            <h1 id="login-title" class="auth-title">Login</h1>
+            <p class="auth-subtitle">Regular users sign in with email. Test-only super accounts use login_id.</p>
+
+            {% if status_message %}
+                <div id="login-status-banner" class="auth-banner auth-banner--{{ status_tone }}" role="status">
+                    <div>{{ status_message }}</div>
+                    {% if verification_state == 'pending' and hinted_email %}
+                        <div>We sent the verification email to {{ hinted_email }}.</div>
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            <form id="login-form" class="auth-form" autocomplete="on">
+                <label>
+                    Login ID
+                    <input
+                        id="login-id"
+                        class="input-field"
+                        type="text"
+                        name="login_id"
+                        value="{{ hinted_login_id|e }}"
+                        required
+                        autofocus
+                    >
+                </label>
+                <p class="auth-login-note">Regular users sign in with email. Test-only super accounts use login_id.</p>
+                <label>
+                    Password
+                    <input id="login-password" class="input-field" type="password" name="password" required>
+                </label>
+
+                <div id="login-error" class="auth-error" role="alert"></div>
+
+                <div class="auth-actions">
+                    <button id="login-submit" type="submit" class="btn btn-primary">Login</button>
+                    <span class="auth-hint">
+                        Need an account? <a id="to-register-link" href="/register">Register</a>
+                    </span>
+                </div>
+            </form>
+
+            <section class="auth-help" aria-labelledby="resend-title">
+                <h2 id="resend-title" class="auth-help-title">Need another verification email?</h2>
+                <p class="auth-help-copy">Enter the same login_id you registered with. For regular users that is your email address.</p>
+                <form id="resend-form" class="auth-inline-form">
+                    <label>
+                        Login ID
+                        <input
+                            id="resend-login-id"
+                            class="input-field"
+                            type="text"
+                            name="resend_login_id"
+                            value="{{ hinted_login_id|e }}"
+                            autocomplete="username"
+                            required
+                        >
+                    </label>
+                    <div class="auth-inline-actions">
+                        <button id="resend-submit" type="submit" class="btn">Resend verification email</button>
+                        <div id="resend-message" class="auth-inline-message" role="status"></div>
+                    </div>
+                </form>
+            </section>
+        </section>
+    </main>
+
+    <script>
+        const nextUrl = "{{ next_url|e }}";
+        const loginPageState = {{ {
+            "verificationState": verification_state,
+            "verificationReason": verification_reason,
+            "hintedLoginId": hinted_login_id,
+            "hintedEmail": hinted_email,
+            "verificationToken": verification_token,
+        } | tojson }};
+        const loginForm = document.getElementById('login-form');
+        const submitButton = document.getElementById('login-submit');
+        const errorBox = document.getElementById('login-error');
+        const registerLink = document.getElementById('to-register-link');
+        const resendForm = document.getElementById('resend-form');
+        const resendButton = document.getElementById('resend-submit');
+        const resendLoginIdInput = document.getElementById('resend-login-id');
+        const resendMessage = document.getElementById('resend-message');
+        const loginIdInput = document.getElementById('login-id');
+
+        registerLink.href = `/register?next=${encodeURIComponent(nextUrl)}`;
+
+        function showError(message) {
+            errorBox.textContent = message;
+            errorBox.classList.add('show');
+        }
+
+        function clearError() {
+            errorBox.textContent = '';
+            errorBox.classList.remove('show');
+        }
+
+        function setResendMessage(message, tone) {
+            resendMessage.textContent = message;
+            resendMessage.classList.remove('is-success', 'is-error');
+            if (tone === 'success') {
+                resendMessage.classList.add('is-success');
+            }
+            if (tone === 'error') {
+                resendMessage.classList.add('is-error');
+            }
+        }
+
+        function resolveErrorMessage(payload, fallbackMessage) {
+            if (!payload) {
+                return fallbackMessage;
+            }
+            if (typeof payload.detail === 'string') {
+                return payload.detail;
+            }
+            if (typeof payload.message === 'string') {
+                return payload.message;
+            }
+            return fallbackMessage;
+        }
+
+        function buildLoginUrl(params) {
+            const query = new URLSearchParams();
+            query.set('next', nextUrl);
+            Object.entries(params).forEach(([key, value]) => {
+                if (value) {
+                    query.set(key, value);
+                }
+            });
+            return `/login?${query.toString()}`;
+        }
+
+        function mapVerificationFailure(detail) {
+            const normalized = (detail || '').toLowerCase();
+            if (normalized.includes('expired')) {
+                return 'expired';
+            }
+            if (normalized.includes('already been used')) {
+                return 'used';
+            }
+            return 'invalid';
+        }
+
+        async function handleVerificationToken(token) {
+            try {
+                const response = await fetch('/auth/verify-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token }),
+                });
+                const payload = await response.json().catch(() => null);
+                if (!response.ok) {
+                    const reason = mapVerificationFailure(resolveErrorMessage(payload, ''));
+                    window.location.href = buildLoginUrl({
+                        verification: 'failed',
+                        reason,
+                    });
+                    return;
+                }
+
+                const verifiedLoginId = payload && payload.account && payload.account.login_id
+                    ? payload.account.login_id
+                    : loginPageState.hintedLoginId;
+                window.location.href = buildLoginUrl({
+                    verification: 'verified',
+                    login_id: verifiedLoginId,
+                });
+            } catch (error) {
+                window.location.href = buildLoginUrl({
+                    verification: 'failed',
+                    reason: 'invalid',
+                });
+            }
+        }
+
+        loginForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            clearError();
+            submitButton.disabled = true;
+
+            const loginId = loginIdInput.value.trim();
+            const password = document.getElementById('login-password').value;
+            resendLoginIdInput.value = loginId;
+
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        login_id: loginId,
+                        password,
+                    }),
+                });
+
+                const payload = await response.json().catch(() => null);
+                if (!response.ok) {
+                    showError(resolveErrorMessage(payload, 'Invalid credentials or email not yet verified.'));
+                    return;
+                }
+
+                window.location.href = nextUrl;
+            } catch (error) {
+                showError('Network error. Please try again later.');
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+
+        resendForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const loginId = resendLoginIdInput.value.trim();
+            if (!loginId) {
+                setResendMessage('Please enter your login ID first.', 'error');
+                return;
+            }
+
+            resendButton.disabled = true;
+            setResendMessage('', '');
+
+            try {
+                await fetch('/auth/resend-verification', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login_id: loginId }),
+                });
+                window.location.href = buildLoginUrl({
+                    verification: 'resent',
+                    login_id: loginId,
+                });
+            } catch (error) {
+                setResendMessage('Network error. Please try again later.', 'error');
+            } finally {
+                resendButton.disabled = false;
+            }
+        });
+
+        if (loginPageState.verificationToken) {
+            handleVerificationToken(loginPageState.verificationToken);
+        }
+    </script>
+</body>
+</html>

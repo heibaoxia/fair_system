@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Fair-System</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .auth-shell {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .auth-card {
+            width: min(500px, 100%);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            padding: 28px;
+        }
+
+        .auth-title {
+            margin-bottom: 8px;
+            font-size: 1.75rem;
+        }
+
+        .auth-subtitle,
+        .auth-note,
+        .auth-hint {
+            color: var(--text-muted);
+        }
+
+        .auth-subtitle {
+            margin-bottom: 16px;
+        }
+
+        .auth-banner {
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            background: rgba(59, 130, 246, 0.08);
+            color: #1d4ed8;
+            font-size: 0.92rem;
+            margin-bottom: 18px;
+            padding: 12px 14px;
+        }
+
+        .auth-banner strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .auth-form {
+            display: grid;
+            gap: 12px;
+        }
+
+        .auth-note {
+            font-size: 0.82rem;
+            margin-top: -4px;
+        }
+
+        .auth-error {
+            display: none;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            background: rgba(239, 68, 68, 0.08);
+            color: #b91c1c;
+            font-size: 0.9rem;
+            padding: 10px 12px;
+        }
+
+        .auth-error.show {
+            display: block;
+        }
+
+        .auth-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 8px;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .auth-hint a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .auth-hint a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <main class="auth-shell">
+        <section class="auth-card" aria-labelledby="register-title">
+            <h1 id="register-title" class="auth-title">Create account</h1>
+            <p class="auth-subtitle">Public registration creates your account automatically and still requires email verification before login.</p>
+
+            <div class="auth-banner" role="note">
+                <strong>Email verification</strong>
+                <div>Use your email, choose a display name, and we will create your account automatically after registration.</div>
+            </div>
+
+            <form id="register-form" class="auth-form" autocomplete="on">
+                <label>
+                    Email
+                    <input
+                        id="register-email"
+                        class="input-field"
+                        type="email"
+                        name="email"
+                        autocomplete="email"
+                        required
+                        autofocus
+                    >
+                </label>
+                <label>
+                    Username
+                    <input
+                        id="register-username"
+                        class="input-field"
+                        type="text"
+                        name="username"
+                        autocomplete="nickname"
+                        required
+                    >
+                </label>
+                <label>
+                    Gender
+                    <select id="register-gender" class="input-field" name="gender" required>
+                        <option value="private" selected>Prefer not to say</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                    </select>
+                </label>
+                <p class="auth-note">Your account starts with private contact visibility by default.</p>
+                <label>
+                    Password
+                    <input id="register-password" class="input-field" type="password" name="password" minlength="6" required>
+                </label>
+                <label>
+                    Confirm password
+                    <input
+                        id="register-password-confirm"
+                        class="input-field"
+                        type="password"
+                        name="password_confirm"
+                        minlength="6"
+                        required
+                    >
+                </label>
+
+                <div id="register-error" class="auth-error" role="alert"></div>
+
+                <div class="auth-actions">
+                    <button id="register-submit" type="submit" class="btn btn-primary">Create account</button>
+                    <span class="auth-hint">
+                        Already registered? <a id="to-login-link" href="/login">Go to login</a>
+                    </span>
+                </div>
+            </form>
+        </section>
+    </main>
+
+    <script>
+        const nextUrl = "{{ next_url|e }}";
+        const registerForm = document.getElementById('register-form');
+        const submitButton = document.getElementById('register-submit');
+        const errorBox = document.getElementById('register-error');
+        const toLoginLink = document.getElementById('to-login-link');
+        const emailInput = document.getElementById('register-email');
+        const usernameInput = document.getElementById('register-username');
+        const genderInput = document.getElementById('register-gender');
+
+        toLoginLink.href = `/login?next=${encodeURIComponent(nextUrl)}`;
+
+        function showError(message) {
+            errorBox.textContent = message;
+            errorBox.classList.add('show');
+        }
+
+        function clearError() {
+            errorBox.textContent = '';
+            errorBox.classList.remove('show');
+        }
+
+        function resolveErrorMessage(payload, fallbackMessage) {
+            if (!payload) {
+                return fallbackMessage;
+            }
+            if (typeof payload.detail === 'string') {
+                return payload.detail;
+            }
+            if (typeof payload.message === 'string') {
+                return payload.message;
+            }
+            return fallbackMessage;
+        }
+
+        function buildPendingVerificationUrl(loginId, email) {
+            const params = new URLSearchParams({
+                next: nextUrl,
+                verification: 'pending',
+                login_id: loginId,
+                email: email,
+            });
+            return `/login?${params.toString()}`;
+        }
+
+        registerForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            clearError();
+
+            const email = emailInput.value.trim();
+            const username = usernameInput.value.trim();
+            const gender = genderInput.value;
+            const password = document.getElementById('register-password').value;
+            const passwordConfirm = document.getElementById('register-password-confirm').value;
+
+            if (!email) {
+                showError('Please enter your email.');
+                return;
+            }
+
+            if (!username) {
+                showError('Please enter your username.');
+                return;
+            }
+
+            if (password !== passwordConfirm) {
+                showError('The two passwords do not match.');
+                return;
+            }
+
+            submitButton.disabled = true;
+
+            const requestBody = {
+                email,
+                password,
+                username,
+                gender,
+            };
+
+            try {
+                const response = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                });
+
+                const payload = await response.json().catch(() => null);
+                if (!response.ok) {
+                    showError(resolveErrorMessage(payload, 'Registration failed. Please review your input.'));
+                    return;
+                }
+
+                const registeredLoginId = payload && payload.account && payload.account.login_id
+                    ? payload.account.login_id
+                    : email;
+                const registeredEmail = payload && payload.account && payload.account.email
+                    ? payload.account.email
+                    : email;
+                window.location.href = buildPendingVerificationUrl(registeredLoginId, registeredEmail);
+            } catch (error) {
+                showError('Network error. Please try again later.');
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

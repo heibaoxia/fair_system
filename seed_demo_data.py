@@ -8,18 +8,29 @@ from sqlalchemy import text
 
 from app import models
 from app.database import Base, SessionLocal, engine
+from app.services.auth_service import _hash_password, register_account
+from app.services.schema_bootstrap import bootstrap_schema
 
 
 MEMBER_DEFINITIONS = [
-    {"name": "刘峰", "tel": "13800001001", "skills": "后端,数据库,架构", "available_hours": 42},
-    {"name": "陈雨", "tel": "13800001002", "skills": "UI,交互,前端", "available_hours": 36},
-    {"name": "赵宁", "tel": "13800001003", "skills": "Python,接口,测试", "available_hours": 38},
-    {"name": "孙悦", "tel": "13800001004", "skills": "前端,可视化,产品", "available_hours": 34},
-    {"name": "周航", "tel": "13800001005", "skills": "运维,DevOps,数据分析", "available_hours": 40},
+    {"name": "刘峰", "tel": "13800001001", "email": "liufeng@example.com", "skills": "后端,数据库,架构", "available_hours": 42, "is_virtual_identity": False},
+    {"name": "陈雨", "tel": "13800001002", "email": "chenyu@example.com", "skills": "UI,交互,前端", "available_hours": 36, "is_virtual_identity": False},
+    {"name": "赵宁", "tel": "13800001003", "email": "zhaoning@example.com", "skills": "Python,接口,测试", "available_hours": 38, "is_virtual_identity": False},
+    {"name": "孙悦", "tel": "13800001004", "email": "sunyue@example.com", "skills": "前端,可视化,产品", "available_hours": 34, "is_virtual_identity": False},
+    {"name": "周航", "tel": "13800001005", "email": "zhouhang@example.com", "skills": "运维,DevOps,数据分析", "available_hours": 40, "is_virtual_identity": False},
 ]
+VIRTUAL_MEMBER_DEFINITIONS = [
+    {"name": "测试-产品视角", "tel": "13800009001", "skills": "产品,需求,验收", "available_hours": 0, "is_virtual_identity": True},
+    {"name": "测试-前端视角", "tel": "13800009002", "skills": "前端,交互,样式", "available_hours": 0, "is_virtual_identity": True},
+    {"name": "测试-后端视角", "tel": "13800009003", "skills": "后端,接口,数据库", "available_hours": 0, "is_virtual_identity": True},
+]
+SUPER_ACCOUNT_LOGIN_ID = "god"
+SUPER_ACCOUNT_PASSWORD = "888888"
+LEGACY_SUPER_ACCOUNT_LOGIN_IDS = ("seed_super_admin",)
 
 
 def ensure_base_schema() -> None:
+    bootstrap_schema(engine)
     Base.metadata.create_all(bind=engine)
     with engine.begin() as connection:
         module_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(modules)"))}
@@ -28,22 +39,99 @@ def ensure_base_schema() -> None:
         if "created_at" not in module_columns:
             connection.execute(text("ALTER TABLE modules ADD COLUMN created_at DATETIME"))
 
-        member_columns = {row[1] for row in connection.execute(text("PRAGMA table_info(members)"))}
-        if "total_earnings" not in member_columns:
-            connection.execute(text("ALTER TABLE members ADD COLUMN total_earnings FLOAT DEFAULT 0.0"))
+
+def normalize_member_payload(payload):
+    normalized = dict(payload)
+    email = normalized.get("email")
+    if email is not None:
+        email = email.strip() or None
+    normalized["email"] = email
+    if email is None:
+        normalized["is_virtual_identity"] = True
+    return normalized
 
 
 def get_or_create_member(db, payload):
-    member = db.query(models.Member).filter(models.Member.tel == payload["tel"]).first()
+    normalized_payload = normalize_member_payload(payload)
+    member = db.query(models.Member).filter(models.Member.tel == normalized_payload["tel"]).first()
     if member is None:
-        member = models.Member(**payload)
+        member = models.Member(**normalized_payload)
         db.add(member)
     else:
-        for key, value in payload.items():
+        for key, value in normalized_payload.items():
             setattr(member, key, value)
     db.commit()
     db.refresh(member)
     return member
+
+
+def ensure_virtual_members_without_accounts(db, members):
+    virtual_member_ids = [member.id for member in members if member.is_virtual_identity]
+    if not virtual_member_ids:
+        return 0
+
+    virtual_account_ids = [
+        row[0]
+        for row in db.query(models.Account.id)
+        .filter(models.Account.member_id.in_(virtual_member_ids))
+        .all()
+    ]
+    if not virtual_account_ids:
+        return 0
+
+    db.query(models.EmailVerificationToken).filter(
+        models.EmailVerificationToken.account_id.in_(virtual_account_ids)
+    ).delete(synchronize_session=False)
+    db.query(models.AuthSession).filter(
+        models.AuthSession.account_id.in_(virtual_account_ids)
+    ).delete(synchronize_session=False)
+    db.query(models.Account).filter(models.Account.id.in_(virtual_account_ids)).delete(
+        synchronize_session=False
+    )
+    db.commit()
+    return len(virtual_account_ids)
+
+
+def ensure_seed_super_account(db):
+    existing = (
+        db.query(models.Account)
+        .filter(models.Account.login_id == SUPER_ACCOUNT_LOGIN_ID)
+        .first()
+    )
+    if existing is None:
+        account = register_account(
+            db,
+            login_id=SUPER_ACCOUNT_LOGIN_ID,
+            password=SUPER_ACCOUNT_PASSWORD,
+            is_super_account=True,
+        )
+    else:
+        existing.password_hash = _hash_password(SUPER_ACCOUNT_PASSWORD)
+        existing.email = None
+        existing.email_verified_at = datetime.now()
+        existing.registration_status = "active"
+        existing.is_super_account = True
+        existing.member_id = None
+        existing.is_active = True
+        db.query(models.AuthSession).filter(
+            models.AuthSession.account_id == existing.id
+        ).delete(synchronize_session=False)
+        account = existing
+
+    legacy_accounts = (
+        db.query(models.Account)
+        .filter(models.Account.login_id.in_(LEGACY_SUPER_ACCOUNT_LOGIN_IDS))
+        .all()
+    )
+    for legacy_account in legacy_accounts:
+        db.query(models.AuthSession).filter(
+            models.AuthSession.account_id == legacy_account.id
+        ).delete(synchronize_session=False)
+        db.delete(legacy_account)
+
+    db.commit()
+    db.refresh(account)
+    return account
 
 
 def clear_all_projects(db) -> None:
@@ -166,6 +254,12 @@ def seed_demo_data():
     try:
         clear_all_projects(db)
         members = [get_or_create_member(db, payload) for payload in MEMBER_DEFINITIONS]
+        virtual_members = [get_or_create_member(db, payload) for payload in VIRTUAL_MEMBER_DEFINITIONS]
+        removed_virtual_accounts = ensure_virtual_members_without_accounts(
+            db,
+            members + virtual_members,
+        )
+        super_account = ensure_seed_super_account(db)
         liu_feng, chen_yu, zhao_ning, sun_yue, zhou_hang = members
 
         common_dimensions = [
@@ -383,6 +477,10 @@ def seed_demo_data():
         print(f"- 项目1（评分期进行中）: /project/{active_project.id}")
         print(f"- 项目2（评分期已结束）: /project/{ended_project.id}")
         print(f"- 项目3（公平负载历史）: /project/{history_project.id}")
+        print(
+            f"- 测试超级号: login_id={super_account.login_id}, password={SUPER_ACCOUNT_PASSWORD}"
+        )
+        print(f"- 虚拟角色池: {len(virtual_members)} 个成员（清理了 {removed_virtual_accounts} 个虚拟成员账号）")
         print("建议验证：")
         print("1. 项目创建页只能在创建时设置评分维度和权重")
         print("2. 打分页只能填分，不能修改权重")

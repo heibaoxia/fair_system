@@ -246,7 +246,7 @@
                     <h1>{{ project.name }}</h1>
                     <p>当前评分人：{{ member.name }}</p>
                 </div>
-                <a class="btn btn-secondary" href="/todo?member_id={{ member_id }}">返回待办</a>
+                <a class="btn btn-secondary" href="/todo">返回待办</a>
             </div>
 
             <div id="all-done-panel" class="complete-state hidden">
@@ -289,11 +289,20 @@
 {% block extra_js %}
 <script>
     const scoringProjectId = {{ project.id }};
-    const scoringMemberId = {{ member_id }};
     const scoringDimensions = {{ scoring_dimensions | tojson }};
     const scoringModules = {{ modules | tojson }};
 
     let selectedModuleId = null;
+
+    function sanitizeIdentityQueryParams() {
+        const url = new URL(window.location.href);
+        if (!url.search) {
+            return;
+        }
+
+        const cleanUrl = `${url.pathname}${url.hash || ''}`;
+        window.history.replaceState({}, '', cleanUrl);
+    }
 
     function scoreStatusText(module) {
         return module.is_scored ? '✅ 已打分' : '⏳ 未打分';
@@ -412,7 +421,6 @@
 
     function buildAssessmentPayload(moduleId) {
         const payload = {
-            member_id: scoringMemberId,
             module_id: moduleId,
             dimension_scores: []
         };
@@ -439,15 +447,7 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        const currentMemberId = getCurrentMemberId();
-        const url = new URL(window.location.href);
-        const memberId = url.searchParams.get('member_id');
-
-        if (currentMemberId && memberId !== String(currentMemberId)) {
-            url.searchParams.set('member_id', currentMemberId);
-            window.location.replace(url.toString());
-            return;
-        }
+        sanitizeIdentityQueryParams();
 
         const firstPending = scoringModules.find((module) => !module.is_scored);
         selectedModuleId = firstPending ? firstPending.id : (scoringModules[0]?.id || null);

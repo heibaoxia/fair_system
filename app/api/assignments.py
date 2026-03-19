@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import models
-from app.api.dependencies import get_db
+from app.api.dependencies import CurrentMemberContext, get_current_member_context, get_db, require_project_pm
 from app.api.scoring import _calc_module_summary, get_assessment_progress
 from app.schemas_assignment import BatchAssignmentConfirmRequest, BatchAssignmentResult, MemberLoad
 from app.services.fair_assignment import FairBatchAssignmentRule
@@ -25,11 +25,6 @@ def _get_project_or_404(project_id: int, db: Session) -> models.Project:
     if project is None:
         raise HTTPException(status_code=404, detail="项目不存在")
     return project
-
-
-def _ensure_project_manager(project: models.Project, current_member_id: int, detail: str) -> None:
-    if getattr(project, "created_by", None) != current_member_id:
-        raise HTTPException(status_code=403, detail=detail)
 
 
 def _build_batch_preview(project: models.Project, modules: List[models.Module], members: List[models.Member], db: Session) -> BatchAssignmentResult:
@@ -72,7 +67,11 @@ def _build_batch_preview(project: models.Project, modules: List[models.Module], 
 
 
 @router.post("/batch/{project_id}", response_model=BatchAssignmentResult)
-def preview_batch_assignment(project_id: int, db: Session = Depends(get_db)):
+def preview_batch_assignment(
+    project_id: int,
+    _context: CurrentMemberContext = Depends(require_project_pm),
+    db: Session = Depends(get_db),
+):
     project = _get_project_or_404(project_id, db)
 
     progress = get_assessment_progress(project_id, db)
@@ -97,11 +96,10 @@ def preview_batch_assignment(project_id: int, db: Session = Depends(get_db)):
 def confirm_batch_assignment(
     project_id: int,
     payload: BatchAssignmentConfirmRequest,
-    current_member_id: int,
+    _context: CurrentMemberContext = Depends(require_project_pm),
     db: Session = Depends(get_db),
 ):
     project = _get_project_or_404(project_id, db)
-    _ensure_project_manager(project, current_member_id, "只有项目创建者才能确认批量分配")
 
     pending_modules = db.query(models.Module).filter(
         models.Module.project_id == project_id,
@@ -147,7 +145,12 @@ def confirm_batch_assignment(
 
 
 @router.post("/direct/{module_id}/{member_id}")
-def direct_assignment(module_id: int, member_id: int, db: Session = Depends(get_db)):
+def direct_assignment(
+    module_id: int,
+    member_id: int,
+    context: CurrentMemberContext = Depends(get_current_member_context),
+    db: Session = Depends(get_db),
+):
     """
     拖拽快速分配：给前端看板用的快捷接口。
     """
@@ -156,13 +159,16 @@ def direct_assignment(module_id: int, member_id: int, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="该模块不存在。")
 
     project_id = getattr(module, "project_id", None)
-    project = db.query(models.Project).filter(models.Project.id == project_id).first() if project_id is not None else None
-    if project is not None:
-        now = datetime.now()
-        a_start = getattr(project, "assessment_start", None)
-        a_end = getattr(project, "assessment_end", None)
-        if a_start is not None and a_end is not None and a_start <= now and now <= a_end:
-            raise HTTPException(status_code=400, detail="评分期内禁止手动分配，请等待评分结束后使用一键分配功能")
+    if project_id is None:
+        raise HTTPException(status_code=404, detail="模块未绑定项目")
+    project = _get_project_or_404(int(project_id), db)
+    require_project_pm(int(project.id), context, db)
+
+    now = datetime.now()
+    a_start = getattr(project, "assessment_start", None)
+    a_end = getattr(project, "assessment_end", None)
+    if a_start is not None and a_end is not None and a_start <= now and now <= a_end:
+        raise HTTPException(status_code=400, detail="评分期内禁止手动分配，请等待评分结束后使用一键分配功能")
 
     member = db.query(models.Member).filter(models.Member.id == member_id).first()
     if not member:

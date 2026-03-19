@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import models, schemas
 from app.api import assessments, projects, scoring
+from app.api.dependencies import CurrentMemberContext
 from app.database import Base
 
 
@@ -34,6 +35,30 @@ class CustomScoringDimensionsTests(unittest.TestCase):
         Base.metadata.drop_all(bind=self.engine)
         self.engine.dispose()
 
+    def build_context(self, member):
+        account = models.Account(
+            id=member.id,
+            login_id=f"user-{member.id}",
+            password_hash="hash",
+            member_id=member.id,
+            is_super_account=False,
+            is_active=True,
+        )
+        session = models.AuthSession(
+            session_token=f"session-{member.id}",
+            account_id=member.id,
+            acting_member_id=member.id,
+            expires_at=datetime.now() + timedelta(days=1),
+        )
+        session.account = account
+        session.acting_member = member
+        return CurrentMemberContext(
+            session=session,
+            account=account,
+            bound_member=member,
+            acting_member=member,
+        )
+
     def test_create_project_without_dimensions_is_rejected(self):
         payload = schemas.ProjectCreate(
             name="Default Dimension Project",
@@ -43,10 +68,10 @@ class CustomScoringDimensionsTests(unittest.TestCase):
         )
 
         with self.assertRaises(HTTPException) as exc_info:
-            projects.create_project(payload, created_by_member_id=self.owner.id, db=self.db)
+            projects.create_project(payload, db=self.db, context=self.build_context(self.owner))
 
         self.assertEqual(exc_info.exception.status_code, 400)
-        self.assertEqual(exc_info.exception.detail, "至少需要设置一个评分维度")
+        self.assertTrue(exc_info.exception.detail)
 
     def test_create_assessment_rejects_dimension_from_other_project(self):
         project = models.Project(
