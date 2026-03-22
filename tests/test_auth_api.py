@@ -486,7 +486,7 @@ def test_public_registration_rejects_legacy_case_only_email_duplicates_via_api()
             },
         )
         assert response.status_code == 400
-        assert "already registered" in response.json()["detail"].lower()
+        assert response.json()["detail"] == "该邮箱已被注册。"
     finally:
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
@@ -520,7 +520,7 @@ def test_verify_email_rejects_expired_and_reused_tokens():
 
         expired_response = client.post("/auth/verify-email", json={"token": expired_issue.token})
         assert expired_response.status_code == 400
-        assert "expired" in expired_response.json()["detail"].lower()
+        assert expired_response.json()["detail"] == "验证链接已过期。"
 
         register_response = client.post(
             "/auth/register",
@@ -539,7 +539,7 @@ def test_verify_email_rejects_expired_and_reused_tokens():
 
         second_verify = client.post("/auth/verify-email", json={"token": token})
         assert second_verify.status_code == 400
-        assert "already been used" in second_verify.json()["detail"].lower()
+        assert second_verify.json()["detail"] == "验证链接已被使用。"
     finally:
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
@@ -578,7 +578,7 @@ def test_resend_verification_replaces_old_token_and_allows_login_after_verificat
 
         invalid_old = client.post("/auth/verify-email", json={"token": original_token})
         assert invalid_old.status_code == 400
-        assert "invalid" in invalid_old.json()["detail"].lower()
+        assert invalid_old.json()["detail"] == "验证令牌无效。"
 
         verified = client.post("/auth/verify-email", json={"token": replacement_token})
         assert verified.status_code == 200
@@ -886,7 +886,7 @@ def test_regular_account_only_sees_own_identity_and_cannot_switch_or_become_pm()
         engine.dispose()
 
 
-def test_super_account_gets_global_identity_pools_and_can_switch_context():
+def test_super_account_only_sees_unbound_and_virtual_identities_and_cannot_switch_into_registered_accounts():
     app, engine, testing_session_local, _ = build_test_app()
     client = TestClient(app)
     world = seed_world(testing_session_local)
@@ -919,10 +919,16 @@ def test_super_account_gets_global_identity_pools_and_can_switch_context():
         assert available_payload["can_switch_identity"] is True
         assert {
             item["id"] for item in available_payload["available_identities"]["global_identities"]
-        } >= {world["owner"].id, world["teammate"].id, world["outsider"].id}
+        } == {world["outsider"].id}
         assert [item["id"] for item in available_payload["available_identities"]["test_identities"]] == [
             world["virtual"].id
         ]
+
+        forbidden_regular_switch = client.post(
+            "/auth/switch-identity",
+            json={"acting_member_id": world["owner"].id},
+        )
+        assert forbidden_regular_switch.status_code == 403
 
         switch_response = client.post(
             "/auth/switch-identity",

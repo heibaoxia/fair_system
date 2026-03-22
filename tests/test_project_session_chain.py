@@ -299,7 +299,7 @@ def test_add_member_handles_project_member_uniqueness_conflict_as_already_in_pro
         engine.dispose()
 
 
-def test_super_account_views_globally_but_executes_management_as_acting_identity():
+def test_super_account_views_globally_but_cannot_impersonate_registered_accounts():
     app, engine, testing_session_local = build_test_app()
     admin_client = TestClient(app)
     world = seed_world(testing_session_local)
@@ -331,41 +331,29 @@ def test_super_account_views_globally_but_executes_management_as_acting_identity
             "/auth/switch-identity",
             json={"acting_member_id": world["teammate"].id},
         )
-        assert switch_to_teammate.status_code == 200
+        assert switch_to_teammate.status_code == 403
 
-        acting_list = admin_client.get("/projects/")
-        assert acting_list.status_code == 200
-        assert acting_list.json() == []
+        switch_to_owner = admin_client.post(
+            "/auth/switch-identity",
+            json={"acting_member_id": world["owner"].id},
+        )
+        assert switch_to_owner.status_code == 403
 
-        acting_read = admin_client.get(f"/projects/{world['project'].id}")
-        assert acting_read.status_code == 403
+        still_global_list = admin_client.get("/projects/")
+        assert still_global_list.status_code == 200
+        assert {item["id"] for item in still_global_list.json()} == {world["project"].id}
 
-        acting_create = admin_client.post(
+        still_global_create = admin_client.post(
             "/projects/",
             json={
-                "name": "Created As Teammate",
+                "name": "Admin Still Without Identity",
                 "description": "",
                 "new_modules": [],
                 "dependencies": [],
                 "scoring_dimensions": [{"name": "质量", "weight": 1.0}],
             },
         )
-        assert acting_create.status_code == 200
-        assert acting_create.json()["created_by"] == world["teammate"].id
-
-        acting_add_member = admin_client.post(f"/projects/{world['project'].id}/members/{world['outsider'].id}")
-        assert acting_add_member.status_code == 403
-
-        switch_to_owner = admin_client.post(
-            "/auth/switch-identity",
-            json={"acting_member_id": world["owner"].id},
-        )
-        assert switch_to_owner.status_code == 200
-
-        owner_mode_add_member = admin_client.post(
-            f"/projects/{world['project'].id}/members/{world['outsider'].id}"
-        )
-        assert owner_mode_add_member.status_code == 200
+        assert still_global_create.status_code == 403
     finally:
         Base.metadata.drop_all(bind=engine)
         engine.dispose()

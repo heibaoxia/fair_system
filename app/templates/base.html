@@ -146,7 +146,7 @@
 
                 <a href="/social" class="sidebar-link" data-path="/social">
 
-                    <span class="sidebar-link-main"><span class="nav-icon">@</span><span>Social</span></span>
+                    <span class="sidebar-link-main"><span class="nav-icon">@</span><span>社交</span></span>
 
                 </a>
 
@@ -176,7 +176,7 @@
 
                     <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
 
-                        Session
+                        当前会话
 
                     </span>
 
@@ -194,7 +194,7 @@
 
                         style="display:block; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
 
-                        Identity
+                        身份切换
 
                     </label>
 
@@ -202,7 +202,7 @@
 
                         style="font-size: 0.875rem; padding: 0.5rem 0.75rem; border-radius: var(--radius-md); cursor: pointer;">
 
-                        <option value="">Loading...</option>
+                        <option value="">加载中...</option>
 
                     </select>
 
@@ -214,7 +214,7 @@
 
                     style="width: 100%; margin-top: 0.9rem; padding: 0.5rem 0.75rem;">
 
-                    Logout
+                    退出登录
 
                 </button>
 
@@ -468,7 +468,7 @@
 
         const SUPER_TEST_ACCOUNT_LABEL = '测试超级号';
 
-        const SUPER_TEST_MODE_LABEL = '测试视角 / super test mode';
+        const SUPER_TEST_MODE_LABEL = '测试视角';
 
 
 
@@ -587,7 +587,7 @@
 
             if (!canSwitchIdentity) {
 
-                selector.appendChild(buildIdentityOption('Own Identity', '', ''));
+                selector.appendChild(buildIdentityOption('当前身份', '', ''));
 
                 return;
 
@@ -625,11 +625,11 @@
 
             const pools = (context && context.available_identities) || {};
 
-            (pools.own_identities || []).forEach((member) => appendIdentity(member, 'own'));
+            (pools.own_identities || []).forEach((member) => appendIdentity(member, '本人'));
 
-            (pools.global_identities || []).forEach((member) => appendIdentity(member, 'global'));
+            (pools.global_identities || []).forEach((member) => appendIdentity(member, '全局'));
 
-            (pools.test_identities || []).forEach((member) => appendIdentity(member, 'test'));
+            (pools.test_identities || []).forEach((member) => appendIdentity(member, '测试'));
 
         }
 
@@ -754,7 +754,7 @@
 
                 if (!response.ok) {
 
-                    throw new Error(getApiErrorMessage(payload, 'Switch identity failed.'));
+                    throw new Error(getApiErrorMessage(payload, '切换身份失败。'));
 
                 }
 
@@ -764,13 +764,13 @@
 
                 const identityName = payload.acting_member ? payload.acting_member.name : getSuperTestIdentityLabel();
 
-                showToast(`Switched identity to ${identityName}.`);
+                showToast(`已切换为 ${identityName}。`);
 
                 setTimeout(() => window.location.reload(), 500);
 
             } catch (error) {
 
-                showToast(error.message || 'Switch identity failed.', true);
+                showToast(error.message || '切换身份失败。', true);
 
             }
 

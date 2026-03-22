@@ -18,7 +18,7 @@ PBKDF2_ITERATIONS = 600_000
 PASSWORD_HASH_SCHEME = "pbkdf2_sha256"
 DEFAULT_SESSION_TTL = timedelta(days=7)
 DEFAULT_EMAIL_VERIFICATION_TTL = timedelta(hours=24)
-INVALID_CREDENTIALS_MESSAGE = "Invalid login credentials."
+INVALID_CREDENTIALS_MESSAGE = "登录凭证无效。"
 
 
 class AuthServiceError(Exception):
@@ -82,7 +82,7 @@ def _is_email_style_identifier(value: str) -> bool:
 
 def _hash_password(password: str, *, salt: bytes | None = None, iterations: int = PBKDF2_ITERATIONS) -> str:
     if not password:
-        raise ValueError("Password must not be empty.")
+        raise ValueError("密码不能为空。")
 
     salt = salt or secrets.token_bytes(16)
     derived_key = hashlib.pbkdf2_hmac(
@@ -131,9 +131,9 @@ _DUMMY_PASSWORD_HASH = _hash_password("dummy-password-for-timing-protection")
 def _get_member_or_error(db: Session, member_id: int) -> models.Member:
     member = db.query(models.Member).filter(models.Member.id == member_id).first()
     if member is None:
-        raise ValueError("Member does not exist.")
+        raise ValueError("成员不存在。")
     if not member.is_active:
-        raise ValueError("Member is inactive.")
+        raise ValueError("成员未激活。")
     return member
 
 
@@ -197,11 +197,18 @@ def _regular_account_member_is_valid(account: models.Account | None) -> bool:
 
 def _get_current_authoritative_member_email(account: models.Account) -> str:
     if not _regular_account_member_is_valid(account):
-        raise ValueError("Bound member is not eligible for email verification.")
+        raise ValueError("绑定成员不支持邮箱验证。")
     authoritative_email = _normalize_email(account.member.email if account.member is not None else None)
     if authoritative_email is None:
-        raise ValueError("Member must have an email for verification.")
+        raise ValueError("成员必须先配置邮箱后才能验证。")
     return authoritative_email
+
+
+def _is_super_switchable_member(member: models.Member | None) -> bool:
+    if member is None or not member.is_active:
+        return False
+    account = getattr(member, "account", None)
+    return account is None
 
 
 def register_account(
@@ -216,14 +223,14 @@ def register_account(
 ) -> models.Account:
     normalized_login_id = login_id.strip()
     if not normalized_login_id:
-        raise ValueError("login_id must not be empty.")
+        raise ValueError("登录标识不能为空。")
     if is_super_account and member_id is not None:
-        raise ValueError("Super accounts cannot be bound to a member.")
+        raise ValueError("超级账户不能绑定成员。")
     if not is_super_account and member_id is None:
-        raise ValueError("Regular accounts must be bound to a member.")
+        raise ValueError("普通账户必须绑定成员。")
 
     if _load_account_by_login_id(db, normalized_login_id) is not None:
-        raise ValueError("login_id is already registered.")
+        raise ValueError("该登录标识已被注册。")
 
     normalized_email = _normalize_email(email)
 
@@ -231,14 +238,14 @@ def register_account(
     if member_id is not None:
         member = _get_member_or_error(db, member_id)
         if bool(getattr(member, "is_virtual_identity", False)):
-            raise ValueError("Virtual identities cannot be bound to login accounts.")
+            raise ValueError("虚拟身份不能绑定登录账户。")
         if (
             db.query(models.Account)
             .filter(models.Account.member_id == member_id)
             .first()
             is not None
         ):
-            raise ValueError("Member already has an account.")
+            raise ValueError("该成员已有账户。")
 
     account_email: str | None = normalized_email
     registration_status = "active"
@@ -247,11 +254,11 @@ def register_account(
     if not is_super_account:
         authoritative_email = _normalize_email(None if member is None else member.email)
         if authoritative_email is None:
-            raise ValueError("Member must have an email for registration.")
+            raise ValueError("成员必须先配置邮箱后才能注册。")
         if normalized_email is None:
-            raise ValueError("email must not be empty.")
+            raise ValueError("邮箱不能为空。")
         if authoritative_email != normalized_email:
-            raise ValueError("Registration email must match member email.")
+            raise ValueError("注册邮箱必须与成员邮箱一致。")
         account_email = authoritative_email
         registration_status = "pending_verification"
         email_verified_at = None
@@ -263,7 +270,7 @@ def register_account(
             .first()
         )
         if duplicate_email is not None:
-            raise ValueError("email is already registered.")
+            raise ValueError("该邮箱已被注册。")
 
     account = models.Account(
         login_id=normalized_login_id,
@@ -291,18 +298,18 @@ def register_public_account(
 ) -> models.Account:
     normalized_email = _normalize_email(email)
     if normalized_email is None:
-        raise ValueError("email must not be empty.")
+        raise ValueError("邮箱不能为空。")
 
     normalized_username = username.strip()
     if not normalized_username:
-        raise ValueError("username must not be empty.")
+        raise ValueError("用户名不能为空。")
 
     normalized_gender = gender.strip().lower()
     if normalized_gender not in {"male", "female", "private"}:
-        raise ValueError("gender is invalid.")
+        raise ValueError("性别参数无效。")
 
     if _load_account_by_login_id(db, normalized_email) is not None:
-        raise ValueError("email is already registered.")
+        raise ValueError("该邮箱已被注册。")
 
     duplicate_member = (
         db.query(models.Member)
@@ -310,7 +317,7 @@ def register_public_account(
         .first()
     )
     if duplicate_member is not None:
-        raise ValueError("email is already registered.")
+        raise ValueError("该邮箱已被注册。")
 
     duplicate_account_email = (
         db.query(models.Account)
@@ -318,7 +325,7 @@ def register_public_account(
         .first()
     )
     if duplicate_account_email is not None:
-        raise ValueError("email is already registered.")
+        raise ValueError("该邮箱已被注册。")
 
     member = models.Member(
         name=normalized_username,
@@ -343,7 +350,7 @@ def register_public_account(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise ValueError("email is already registered.") from exc
+        raise ValueError("该邮箱已被注册。") from exc
     db.refresh(account)
     return account
 
@@ -356,14 +363,14 @@ def issue_email_verification_token(
 ) -> VerificationTokenIssue:
     account = _load_account(db, account_id)
     if account is None:
-        raise ValueError("Account does not exist.")
+        raise ValueError("账户不存在。")
     if account.is_super_account:
-        raise ValueError("Super accounts do not use email verification.")
+        raise ValueError("超级账户不需要邮箱验证。")
     if not account.is_active:
-        raise ValueError("Account is inactive.")
+        raise ValueError("账户未激活。")
     authoritative_email = _get_current_authoritative_member_email(account)
     if account.registration_status == "active" and account.email_verified_at is not None:
-        raise ValueError("Account is already verified.")
+        raise ValueError("账户已经完成验证。")
     if account.email != authoritative_email:
         account.email = authoritative_email
 
@@ -387,7 +394,7 @@ def issue_email_verification_token(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise ValueError("email is already registered.") from exc
+        raise ValueError("该邮箱已被注册。") from exc
     db.refresh(verification_token)
     return VerificationTokenIssue(
         account_id=account.id,
@@ -400,43 +407,43 @@ def issue_email_verification_token(
 def resend_email_verification(db: Session, *, login_id: str) -> VerificationTokenIssue:
     account = _load_account_by_login_id(db, login_id)
     if account is None:
-        raise ValueError("Account does not exist.")
+        raise ValueError("账户不存在。")
     if account.is_super_account:
-        raise ValueError("Super accounts do not use email verification.")
+        raise ValueError("超级账户不需要邮箱验证。")
     if account.registration_status == "active" and account.email_verified_at is not None:
-        raise ValueError("Account is already verified.")
+        raise ValueError("账户已经完成验证。")
     return issue_email_verification_token(db, account_id=account.id)
 
 
 def verify_email_token(db: Session, token: str) -> models.Account:
     normalized_token = token.strip()
     if not normalized_token:
-        raise EmailVerificationError("Verification token is invalid.")
+        raise EmailVerificationError("验证令牌无效。")
 
     verification = _load_verification_record(db, _hash_verification_token(normalized_token))
     if verification is None:
-        raise EmailVerificationError("Verification token is invalid.")
+        raise EmailVerificationError("验证令牌无效。")
     if verification.consumed_at is not None:
-        raise EmailVerificationError("Verification token has already been used.")
+        raise EmailVerificationError("验证链接已被使用。")
 
     now = _now()
     if verification.expires_at <= now:
-        raise EmailVerificationError("Verification token has expired.")
+        raise EmailVerificationError("验证链接已过期。")
 
     account = verification.account
     if account is None or not account.is_active:
-        raise EmailVerificationError("Verification token is invalid.")
+        raise EmailVerificationError("验证令牌无效。")
     if account.is_super_account:
-        raise EmailVerificationError("Verification token is invalid.")
+        raise EmailVerificationError("验证令牌无效。")
     if not _regular_account_member_is_valid(account):
-        raise EmailVerificationError("Verification token is invalid.")
+        raise EmailVerificationError("验证令牌无效。")
     authoritative_email = _normalize_email(account.member.email if account.member is not None else None)
     if authoritative_email is None:
-        raise EmailVerificationError("Verification token is invalid.")
+        raise EmailVerificationError("验证令牌无效。")
     account_email = _normalize_email(account.email)
     verification_email = _normalize_email(verification.email)
     if account_email != authoritative_email or verification_email != authoritative_email:
-        raise EmailVerificationError("Verification token is invalid.")
+        raise EmailVerificationError("验证令牌无效。")
 
     verification.consumed_at = now
     account.email_verified_at = now
@@ -444,7 +451,7 @@ def verify_email_token(db: Session, token: str) -> models.Account:
     db.commit()
     refreshed_account = _load_account(db, account.id)
     if refreshed_account is None:
-        raise EmailVerificationError("Verification token is invalid.")
+        raise EmailVerificationError("验证令牌无效。")
     return refreshed_account
 
 
@@ -489,7 +496,7 @@ def create_session(
         if not _regular_account_member_is_valid(account):
             raise AuthenticationError(INVALID_CREDENTIALS_MESSAGE)
         if acting_member_id is not None and acting_member_id != account.member_id:
-            raise AuthorizationError("Regular accounts cannot switch acting members.")
+            raise AuthorizationError("普通账户不能切换业务身份。")
         resolved_acting_member_id = account.member_id
 
     now = _now()
@@ -561,15 +568,17 @@ def switch_acting_member(
 ) -> models.AuthSession:
     session = load_session(db, session_token)
     if session is None:
-        raise SessionError("Session is invalid or expired.")
+        raise SessionError("当前登录会话无效或已过期。")
 
     if not session.account.is_super_account:
-        raise AuthorizationError("Regular accounts cannot switch acting members.")
+        raise AuthorizationError("普通账户不能切换业务身份。")
 
     if acting_member_id is None:
         session.acting_member_id = session.account.member_id
     else:
-        _get_member_or_error(db, acting_member_id)
+        member = _get_member_or_error(db, acting_member_id)
+        if not _is_super_switchable_member(member):
+            raise AuthorizationError("测试超级号不能切换到普通注册账户视角。")
         session.acting_member_id = acting_member_id
 
     session.last_seen_at = _now()

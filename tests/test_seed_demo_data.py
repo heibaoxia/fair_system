@@ -100,7 +100,7 @@ def test_seed_members_without_email_become_virtual_and_cleanup_bound_auth_record
 
             with pytest.raises(
                 ValueError,
-                match="Virtual identities cannot be bound to login accounts.",
+                match="虚拟身份不能绑定登录账户。",
             ):
                 register_account(
                     db,

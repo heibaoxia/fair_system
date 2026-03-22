@@ -174,7 +174,7 @@ def test_register_account_internal_path_hashes_password_requires_member_email_ma
             )
 
         assert str(pending_login.value) == str(missing_account.value)
-        assert "match member email" in str(mismatch.value).lower()
+        assert str(mismatch.value) == "注册邮箱必须与成员邮箱一致。"
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)
@@ -211,7 +211,7 @@ def test_email_verification_token_supports_hash_only_verify_expiry_single_use_an
         with pytest.raises(EmailVerificationError) as reused:
             verify_email_token(db, first_issue.token)
 
-        assert "already been used" in str(reused.value).lower()
+        assert str(reused.value) == "验证链接已被使用。"
 
         expired_account = register_account(
             db,
@@ -229,7 +229,7 @@ def test_email_verification_token_supports_hash_only_verify_expiry_single_use_an
         with pytest.raises(EmailVerificationError) as expired:
             verify_email_token(db, expired_issue.token)
 
-        assert "expired" in str(expired.value).lower()
+        assert str(expired.value) == "验证链接已过期。"
 
         resend_member = models.Member(
             name="Resend User",
@@ -262,7 +262,7 @@ def test_email_verification_token_supports_hash_only_verify_expiry_single_use_an
         with pytest.raises(EmailVerificationError) as invalidated:
             verify_email_token(db, original_issue.token)
 
-        assert "invalid" in str(invalidated.value).lower()
+        assert str(invalidated.value) == "验证令牌无效。"
 
         resent_verified_account = verify_email_token(db, replacement_issue.token)
         assert resent_verified_account.id == resend_account.id
@@ -340,7 +340,7 @@ def test_resend_email_verification_handles_email_realign_collision_as_controlled
         with pytest.raises(ValueError) as exc_info:
             resend_email_verification(db, login_id="owner")
 
-        assert "email is already registered" in str(exc_info.value).lower()
+        assert str(exc_info.value) == "该邮箱已被注册。"
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)
@@ -442,7 +442,7 @@ def test_public_registration_rejects_legacy_email_duplicates_that_only_differ_by
                 gender="private",
             )
 
-        assert "already registered" in str(exc_info.value).lower()
+        assert str(exc_info.value) == "该邮箱已被注册。"
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)

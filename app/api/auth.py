@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas_auth
+from app.environment import ensure_env_loaded
 from app.api.dependencies import (
     SESSION_COOKIE_NAME,
     CurrentMemberContext,
@@ -45,9 +46,10 @@ def get_email_sender():
 
 
 def get_verification_base_url() -> str:
+    ensure_env_loaded()
     base_url = os.getenv("FAIR_AUTH_VERIFY_URL_BASE", "").strip()
     if not base_url:
-        raise EmailSenderConfigurationError("FAIR_AUTH_VERIFY_URL_BASE is required.")
+        raise EmailSenderConfigurationError("缺少邮箱验证地址配置。")
     return base_url
 
 
@@ -83,7 +85,10 @@ def _build_identity_pools(
     global_identities = [
         schemas_auth.AuthMemberIdentity.model_validate(member)
         for member in members
-        if not bool(getattr(member, "is_virtual_identity", False))
+        if (
+            not bool(getattr(member, "is_virtual_identity", False))
+            and member.account is None
+        )
     ]
     test_identities = [
         schemas_auth.AuthMemberIdentity.model_validate(member)

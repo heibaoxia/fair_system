@@ -92,6 +92,7 @@ fair-system/
 ├─ init_db.py              # 初始化数据库结构
 ├─ seed_demo_data.py       # 重建演示数据
 ├─ acceptance_helper.py    # 打印验收用项目/成员/模块 ID
+├─ .env.example            # 环境变量示例
 ├─ fair_system.db          # 本地 SQLite 数据库
 └─ README.md
 ```
@@ -108,19 +109,27 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-2. 重建演示数据
+2. 如需启用公开注册和邮箱验证，先复制环境变量示例文件
+
+```bash
+copy .env.example .env
+```
+
+然后按你的 SMTP 信息修改 `.env` 中的值。
+
+3. 重建演示数据
 
 ```bash
 python seed_demo_data.py
 ```
 
-3. 启动服务
+4. 启动服务
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-4. 打开页面
+5. 打开页面
 
 - 系统首页：[http://127.0.0.1:8000](http://127.0.0.1:8000)
 - Swagger 文档：[http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
@@ -172,17 +181,72 @@ password: 888888
 
 ## 邮箱验证配置
 
-如果你要启用“公开注册 + 邮箱验证”这条链路，需要提供下面这些环境变量：
+如果你要启用“公开注册 + 邮箱验证”这条链路，需要提供下面这些环境变量。
+
+项目现在同时支持两种方式：
+
+- 方式 A：直接在当前 PowerShell 终端里设置环境变量
+- 方式 B：复制 `.env.example` 为 `.env`，项目启动时自动读取 `.env`
+
+推荐直接从仓库里的 `.env.example` 复制一份：
+
+```bash
+copy .env.example .env
+```
+
+再把 `.env` 里的示例值改成你的真实配置。`.env.example` 可以提交到 GitHub，`.env` 不要提交。
+
+### QQ 邮箱（推荐本地测试先用）
 
 ```powershell
 $env:FAIR_AUTH_VERIFY_URL_BASE="http://127.0.0.1:8000/login"
-$env:FAIR_SMTP_HOST="smtp.example.com"
-$env:FAIR_SMTP_PORT="587"
-$env:FAIR_EMAIL_FROM="no-reply@example.com"
-$env:FAIR_SMTP_USERNAME="your_smtp_user"
-$env:FAIR_SMTP_PASSWORD="your_smtp_password"
-$env:FAIR_SMTP_USE_TLS="true"
+$env:FAIR_SMTP_HOST="smtp.qq.com"
+$env:FAIR_SMTP_PORT="465"
+$env:FAIR_EMAIL_FROM="your_qq_mail@qq.com"
+$env:FAIR_SMTP_USERNAME="your_qq_mail@qq.com"
+$env:FAIR_SMTP_PASSWORD="your_qq_smtp_authorization_code"
+$env:FAIR_SMTP_USE_TLS="false"
+$env:FAIR_SMTP_USE_SSL="true"
+$env:FAIR_SMTP_TIMEOUT_SECONDS="10"
 ```
+
+注意：
+
+- `FAIR_SMTP_PASSWORD` 需要填写 QQ 邮箱 SMTP 授权码，不是邮箱登录密码
+- 如果你更习惯 `.env` 文件，就把上面的值填进 `.env`
+
+### 163 邮箱
+
+```powershell
+$env:FAIR_AUTH_VERIFY_URL_BASE="http://127.0.0.1:8000/login"
+$env:FAIR_SMTP_HOST="smtp.163.com"
+$env:FAIR_SMTP_PORT="465"
+$env:FAIR_EMAIL_FROM="your_163_mail@163.com"
+$env:FAIR_SMTP_USERNAME="your_163_mail@163.com"
+$env:FAIR_SMTP_PASSWORD="your_163_smtp_authorization_code"
+$env:FAIR_SMTP_USE_TLS="false"
+$env:FAIR_SMTP_USE_SSL="true"
+$env:FAIR_SMTP_TIMEOUT_SECONDS="10"
+```
+
+### Gmail
+
+```powershell
+$env:FAIR_AUTH_VERIFY_URL_BASE="http://127.0.0.1:8000/login"
+$env:FAIR_SMTP_HOST="smtp.gmail.com"
+$env:FAIR_SMTP_PORT="587"
+$env:FAIR_EMAIL_FROM="your_gmail@gmail.com"
+$env:FAIR_SMTP_USERNAME="your_gmail@gmail.com"
+$env:FAIR_SMTP_PASSWORD="your_google_app_password"
+$env:FAIR_SMTP_USE_TLS="true"
+$env:FAIR_SMTP_USE_SSL="false"
+$env:FAIR_SMTP_TIMEOUT_SECONDS="10"
+```
+
+注意：
+
+- Gmail 这里需要使用 Google App Password
+- 当前项目不支持 OAuth，只支持 SMTP 用户名 + 授权码 / App Password
 
 可选项：
 
@@ -227,7 +291,7 @@ $env:FAIR_SMTP_USE_TLS="true"
 运行自动化测试：
 
 ```bash
-pytest
+python -m pytest
 ```
 
 如果你的环境里还没有 `pytest`，请先自行安装：

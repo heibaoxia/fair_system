@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register - Fair-System</title>
+    <title>注册 - Fair-System</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
         .auth-shell {
@@ -99,17 +99,17 @@
 <body>
     <main class="auth-shell">
         <section class="auth-card" aria-labelledby="register-title">
-            <h1 id="register-title" class="auth-title">Create account</h1>
-            <p class="auth-subtitle">Public registration creates your account automatically and still requires email verification before login.</p>
+            <h1 id="register-title" class="auth-title">注册账号</h1>
+            <p class="auth-subtitle">公开注册会自动创建你的账号，完成邮箱验证后即可登录。</p>
 
             <div class="auth-banner" role="note">
-                <strong>Email verification</strong>
-                <div>Use your email, choose a display name, and we will create your account automatically after registration.</div>
+                <strong>邮箱验证</strong>
+                <div>填写邮箱、用户名和性别后，系统会自动创建你的账号，并向你的邮箱发送验证邮件。</div>
             </div>
 
             <form id="register-form" class="auth-form" autocomplete="on">
                 <label>
-                    Email
+                    邮箱
                     <input
                         id="register-email"
                         class="input-field"
@@ -121,7 +121,7 @@
                     >
                 </label>
                 <label>
-                    Username
+                    用户名
                     <input
                         id="register-username"
                         class="input-field"
@@ -132,20 +132,20 @@
                     >
                 </label>
                 <label>
-                    Gender
+                    性别
                     <select id="register-gender" class="input-field" name="gender" required>
-                        <option value="private" selected>Prefer not to say</option>
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
+                        <option value="private" selected>保密</option>
+                        <option value="male">男</option>
+                        <option value="female">女</option>
                     </select>
                 </label>
-                <p class="auth-note">Your account starts with private contact visibility by default.</p>
+                <p class="auth-note">你的邮箱和手机号默认不公开，可在后续资料页自行设置。</p>
                 <label>
-                    Password
+                    密码
                     <input id="register-password" class="input-field" type="password" name="password" minlength="6" required>
                 </label>
                 <label>
-                    Confirm password
+                    确认密码
                     <input
                         id="register-password-confirm"
                         class="input-field"
@@ -159,9 +159,9 @@
                 <div id="register-error" class="auth-error" role="alert"></div>
 
                 <div class="auth-actions">
-                    <button id="register-submit" type="submit" class="btn btn-primary">Create account</button>
+                    <button id="register-submit" type="submit" class="btn btn-primary">立即注册</button>
                     <span class="auth-hint">
-                        Already registered? <a id="to-login-link" href="/login">Go to login</a>
+                        已有账号？<a id="to-login-link" href="/login">去登录</a>
                     </span>
                 </div>
             </form>
@@ -224,17 +224,17 @@
             const passwordConfirm = document.getElementById('register-password-confirm').value;
 
             if (!email) {
-                showError('Please enter your email.');
+                showError('请输入邮箱。');
                 return;
             }
 
             if (!username) {
-                showError('Please enter your username.');
+                showError('请输入用户名。');
                 return;
             }
 
             if (password !== passwordConfirm) {
-                showError('The two passwords do not match.');
+                showError('两次输入的密码不一致。');
                 return;
             }
 
@@ -256,7 +256,7 @@
 
                 const payload = await response.json().catch(() => null);
                 if (!response.ok) {
-                    showError(resolveErrorMessage(payload, 'Registration failed. Please review your input.'));
+                    showError(resolveErrorMessage(payload, '注册失败，请检查输入信息。'));
                     return;
                 }
 
@@ -268,7 +268,7 @@
                     : email;
                 window.location.href = buildPendingVerificationUrl(registeredLoginId, registeredEmail);
             } catch (error) {
-                showError('Network error. Please try again later.');
+                showError('网络异常，请稍后重试。');
             } finally {
                 submitButton.disabled = false;
             }

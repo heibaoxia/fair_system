@@ -74,7 +74,7 @@ def test_base_template_super_account_copy_is_explicitly_test_only():
         assert response.status_code == 200
         assert "God Mode" not in body
         assert "const SUPER_TEST_ACCOUNT_LABEL = '测试超级号';" in body
-        assert "const SUPER_TEST_MODE_LABEL = '测试视角 / super test mode';" in body
+        assert "const SUPER_TEST_MODE_LABEL = '测试视角';" in body
         assert "buildIdentityOption(getSuperTestIdentityLabel(), 0, selectedMemberId)" in body
     finally:
         client.close()
@@ -91,8 +91,8 @@ def test_register_page_copy_does_not_describe_member_profile_first_registration(
 
         assert response.status_code == 200
         assert "member profile" not in body.lower()
-        assert "create your account automatically" in body.lower()
-        assert "private contact visibility by default" in body.lower()
+        assert "系统会自动创建你的账号" in body
+        assert "邮箱和手机号默认不公开" in body
     finally:
         client.close()
         harness.close()

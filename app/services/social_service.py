@@ -152,7 +152,7 @@ def _ensure_visible_target(
         account_id=target_account_id,
     )
     if not target_profiles:
-        raise SocialTargetNotFoundError("Account not found.")
+        raise SocialTargetNotFoundError("未找到该账户。")
 
 
 def follow_account(
@@ -162,7 +162,7 @@ def follow_account(
     target_account_id: int,
 ) -> None:
     if follower_account_id == target_account_id:
-        raise SocialSelfFollowError("Users cannot follow themselves.")
+        raise SocialSelfFollowError("不能关注自己。")
 
     _ensure_visible_target(
         db,
@@ -210,7 +210,7 @@ def unfollow_account(
     target_account_id: int,
 ) -> None:
     if follower_account_id == target_account_id:
-        raise SocialSelfFollowError("Users cannot follow themselves.")
+        raise SocialSelfFollowError("不能关注自己。")
 
     _ensure_visible_target(
         db,

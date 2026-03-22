@@ -134,7 +134,7 @@ def test_social_page_script_refreshes_project_invites_after_failed_decision_too(
         assert response.status_code == 200
         assert (
             "} catch (error) {\n"
-            "            showToast(error.message || 'Failed to update invite.', true);\n"
+            "            showToast(error.message || '处理邀请失败。', true);\n"
             "        } finally {\n"
             "            await loadProjectInvites();\n"
             "        }"
@@ -173,13 +173,13 @@ def test_social_page_invite_section_renders_pending_history_hooks_without_projec
         assert response.status_code == 200
         assert "待处理邀请" in body
         assert "历史记录" in body
-        assert "No pending invites yet." in body
-        assert "No invite history yet." in body
+        assert "当前没有待处理的邀请。" in body
+        assert "当前还没有邀请记录。" in body
         assert "邀请人" in body
         assert "成员数" in body
         assert "项目总收入" in body
-        assert "Accept" in body
-        assert "Reject" in body
+        assert "接受邀请" in body
+        assert "拒绝邀请" in body
         assert "Project Detail" not in body
         assert "View project" not in body
         assert 'href="/project/' not in body
@@ -404,6 +404,6 @@ def test_social_project_invites_rejects_super_account_callers():
         response = client.get("/social/project-invites")
 
         assert response.status_code == 403
-        assert response.json() == {"detail": "Super accounts cannot use social endpoints."}
+        assert response.json() == {"detail": "测试超级号不能使用社交功能。"}
     finally:
         engine.dispose()

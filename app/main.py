@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.database import engine
+from app.environment import ensure_env_loaded
 from app.services.schema_bootstrap import bootstrap_schema
 from app.api import auth
 
@@ -34,6 +35,8 @@ from app.api import (
     social,
     swaps,
 )
+
+ensure_env_loaded()
 
 # 1. 创建 FastAPI 实例（建造大门）
 app = FastAPI(

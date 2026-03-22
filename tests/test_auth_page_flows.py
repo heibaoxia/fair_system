@@ -63,7 +63,7 @@ def test_login_page_renders_unverified_login_help_and_auto_verify_entrypoints():
         assert response.status_code == 200
         assert '"verificationToken": "abc123"' in body
         assert "/auth/verify-email" in body
-        assert "Regular users sign in with email." in body
+        assert "普通用户使用邮箱登录" in body
     finally:
         client.close()
         harness.close()
@@ -132,8 +132,8 @@ def test_login_page_explains_regular_users_use_email_and_marks_super_accounts_as
 
         assert response.status_code == 200
         assert 'name="login_id"' in body
-        assert "Regular users sign in with email." in body
-        assert "Test-only super accounts use login_id." in body
+        assert "普通用户使用邮箱登录" in body
+        assert "测试超级号使用登录标识登录" in body
     finally:
         client.close()
         harness.close()

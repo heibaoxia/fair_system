@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Fair-System</title>
+    <title>登录 - Fair-System</title>
     <link rel="stylesheet" href="/static/style.css">
     <style>
         .auth-shell {
@@ -147,46 +147,46 @@
     {% set verification_token = request.query_params.get('token', '') %}
     {% if verification_state == 'pending' %}
         {% set status_tone = 'info' %}
-        {% set status_message = 'Account created. Please verify your email before logging in.' %}
+        {% set status_message = '账号已创建，请先完成邮箱验证后再登录。' %}
     {% elif verification_state == 'verified' %}
         {% set status_tone = 'success' %}
-        {% set status_message = 'Email verification succeeded. You can log in now.' %}
+        {% set status_message = '邮箱验证成功，现在可以登录了。' %}
     {% elif verification_state == 'resent' %}
         {% set status_tone = 'success' %}
-        {% set status_message = 'A new verification email has been sent.' %}
+        {% set status_message = '新的验证邮件已发送，请查收。' %}
     {% elif verification_state == 'failed' and verification_reason == 'expired' %}
         {% set status_tone = 'error' %}
-        {% set status_message = 'The verification link has expired. Request a new one below.' %}
+        {% set status_message = '验证链接已过期，请在下方重新发送验证邮件。' %}
     {% elif verification_state == 'failed' and verification_reason == 'used' %}
         {% set status_tone = 'error' %}
-        {% set status_message = 'That verification link was already used.' %}
+        {% set status_message = '该验证链接已被使用。' %}
     {% elif verification_state == 'failed' %}
         {% set status_tone = 'error' %}
-        {% set status_message = 'The verification link is invalid.' %}
+        {% set status_message = '验证链接无效。' %}
     {% elif verification_token %}
         {% set status_tone = 'info' %}
-        {% set status_message = 'Verifying your email now. Please wait.' %}
+        {% set status_message = '正在验证邮箱，请稍候。' %}
     {% else %}
         {% set status_tone = '' %}
         {% set status_message = '' %}
     {% endif %}
     <main class="auth-shell">
         <section class="auth-card" aria-labelledby="login-title">
-            <h1 id="login-title" class="auth-title">Login</h1>
-            <p class="auth-subtitle">Regular users sign in with email. Test-only super accounts use login_id.</p>
+            <h1 id="login-title" class="auth-title">登录</h1>
+            <p class="auth-subtitle">普通用户使用邮箱登录，测试超级号使用登录标识登录。</p>
 
             {% if status_message %}
                 <div id="login-status-banner" class="auth-banner auth-banner--{{ status_tone }}" role="status">
                     <div>{{ status_message }}</div>
                     {% if verification_state == 'pending' and hinted_email %}
-                        <div>We sent the verification email to {{ hinted_email }}.</div>
+                        <div>验证邮件已发送至 {{ hinted_email }}。</div>
                     {% endif %}
                 </div>
             {% endif %}
 
             <form id="login-form" class="auth-form" autocomplete="on">
                 <label>
-                    Login ID
+                    登录标识
                     <input
                         id="login-id"
                         class="input-field"
@@ -197,28 +197,28 @@
                         autofocus
                     >
                 </label>
-                <p class="auth-login-note">Regular users sign in with email. Test-only super accounts use login_id.</p>
+                <p class="auth-login-note">普通用户使用邮箱登录，测试超级号使用登录标识登录。</p>
                 <label>
-                    Password
+                    密码
                     <input id="login-password" class="input-field" type="password" name="password" required>
                 </label>
 
                 <div id="login-error" class="auth-error" role="alert"></div>
 
                 <div class="auth-actions">
-                    <button id="login-submit" type="submit" class="btn btn-primary">Login</button>
+                    <button id="login-submit" type="submit" class="btn btn-primary">登录</button>
                     <span class="auth-hint">
-                        Need an account? <a id="to-register-link" href="/register">Register</a>
+                        还没有账号？<a id="to-register-link" href="/register">去注册</a>
                     </span>
                 </div>
             </form>
 
             <section class="auth-help" aria-labelledby="resend-title">
-                <h2 id="resend-title" class="auth-help-title">Need another verification email?</h2>
-                <p class="auth-help-copy">Enter the same login_id you registered with. For regular users that is your email address.</p>
+                <h2 id="resend-title" class="auth-help-title">没收到验证邮件？</h2>
+                <p class="auth-help-copy">请输入注册时使用的登录标识。普通用户这里填写邮箱，测试超级号不需要邮箱验证。</p>
                 <form id="resend-form" class="auth-inline-form">
                     <label>
-                        Login ID
+                        登录标识
                         <input
                             id="resend-login-id"
                             class="input-field"
@@ -230,7 +230,7 @@
                         >
                     </label>
                     <div class="auth-inline-actions">
-                        <button id="resend-submit" type="submit" class="btn">Resend verification email</button>
+                        <button id="resend-submit" type="submit" class="btn">重新发送验证邮件</button>
                         <div id="resend-message" class="auth-inline-message" role="status"></div>
                     </div>
                 </form>
@@ -368,13 +368,13 @@
 
                 const payload = await response.json().catch(() => null);
                 if (!response.ok) {
-                    showError(resolveErrorMessage(payload, 'Invalid credentials or email not yet verified.'));
+                    showError(resolveErrorMessage(payload, '登录失败，请检查登录信息或先完成邮箱验证。'));
                     return;
                 }
 
                 window.location.href = nextUrl;
             } catch (error) {
-                showError('Network error. Please try again later.');
+                showError('网络异常，请稍后重试。');
             } finally {
                 submitButton.disabled = false;
             }
@@ -385,7 +385,7 @@
 
             const loginId = resendLoginIdInput.value.trim();
             if (!loginId) {
-                setResendMessage('Please enter your login ID first.', 'error');
+                setResendMessage('请先输入登录标识。', 'error');
                 return;
             }
 
@@ -403,7 +403,7 @@
                     login_id: loginId,
                 });
             } catch (error) {
-                setResendMessage('Network error. Please try again later.', 'error');
+                setResendMessage('网络异常，请稍后重试。', 'error');
             } finally {
                 resendButton.disabled = false;
             }

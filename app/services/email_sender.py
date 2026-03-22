@@ -7,6 +7,8 @@ from datetime import datetime
 from email.message import EmailMessage
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from app.environment import ensure_env_loaded
+
 
 class EmailSenderError(Exception):
     pass
@@ -43,6 +45,7 @@ class SMTPEmailSettings:
 
     @classmethod
     def from_env(cls) -> "SMTPEmailSettings":
+        ensure_env_loaded()
         use_ssl = _env_flag("FAIR_SMTP_USE_SSL", default=False)
         use_tls = _env_flag("FAIR_SMTP_USE_TLS", default=not use_ssl)
         default_port = "465" if use_ssl else "587"
@@ -51,20 +54,20 @@ class SMTPEmailSettings:
         port_text = os.getenv("FAIR_SMTP_PORT", default_port).strip()
 
         if not host:
-            raise EmailSenderConfigurationError("FAIR_SMTP_HOST is required.")
+            raise EmailSenderConfigurationError("缺少 SMTP 主机配置。")
         if not sender:
-            raise EmailSenderConfigurationError("FAIR_EMAIL_FROM is required.")
+            raise EmailSenderConfigurationError("缺少发件人邮箱配置。")
 
         try:
             port = int(port_text)
         except ValueError as exc:
-            raise EmailSenderConfigurationError("FAIR_SMTP_PORT must be an integer.") from exc
+            raise EmailSenderConfigurationError("SMTP 端口必须是整数。") from exc
 
         timeout_text = os.getenv("FAIR_SMTP_TIMEOUT_SECONDS", "10").strip()
         try:
             timeout_seconds = float(timeout_text)
         except ValueError as exc:
-            raise EmailSenderConfigurationError("FAIR_SMTP_TIMEOUT_SECONDS must be numeric.") from exc
+            raise EmailSenderConfigurationError("SMTP 超时时间必须是数字。") from exc
 
         username = os.getenv("FAIR_SMTP_USERNAME")
         password = os.getenv("FAIR_SMTP_PASSWORD")
@@ -97,15 +100,15 @@ def build_verification_email_message(
 ) -> VerificationEmailMessage:
     base_url = verification_base_url.strip()
     if not base_url:
-        raise EmailSenderConfigurationError("Verification base URL is required.")
+        raise EmailSenderConfigurationError("缺少验证链接基础地址。")
 
     verification_url = _build_clickable_verification_url(base_url, token)
-    subject = "Verify your FAIR account email"
+    subject = "请验证你的 Fair-System 账号邮箱"
     text_body = (
-        f"Hello {login_id},\n\n"
-        "Please verify your email address to activate your FAIR account.\n"
-        f"Verification link: {verification_url}\n"
-        f"This link expires at {expires_at.isoformat()}.\n"
+        f"{login_id}，你好：\n\n"
+        "请点击下方链接完成邮箱验证，验证成功后即可登录 Fair-System。\n"
+        f"验证链接：{verification_url}\n"
+        f"链接过期时间：{expires_at.isoformat()}。\n"
     )
     return VerificationEmailMessage(
         recipient=recipient,
@@ -172,7 +175,7 @@ class SMTPEmailSender:
                 self._login_if_needed(smtp)
                 smtp.send_message(email_message)
         except OSError as exc:
-            raise EmailDeliveryError("Failed to deliver verification email.") from exc
+            raise EmailDeliveryError("验证邮件发送失败。") from exc
 
     def _login_if_needed(self, smtp: smtplib.SMTP) -> None:
         if self.settings.username:

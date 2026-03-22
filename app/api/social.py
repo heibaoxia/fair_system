@@ -14,14 +14,14 @@ def require_regular_social_context(
     context: CurrentMemberContext = Depends(get_current_member_context),
 ) -> CurrentMemberContext:
     if context.account.is_super_account:
-        raise HTTPException(status_code=403, detail="Super accounts cannot use social endpoints.")
+        raise HTTPException(status_code=403, detail="测试超级号不能使用社交功能。")
     if (
         not context.account.is_active
         or context.bound_member is None
         or not context.bound_member.is_active
         or bool(getattr(context.bound_member, "is_virtual_identity", False))
     ):
-        raise HTTPException(status_code=403, detail="Social access requires an active regular account.")
+        raise HTTPException(status_code=403, detail="只有激活的普通账户才能使用社交功能。")
     return context
 
 

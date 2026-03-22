@@ -126,18 +126,18 @@ def test_social_page_script_wires_validation_endpoints_refresh_and_errors():
         assert 'function parseExactAccountId(rawValue)' in body
         assert '/^[0-9]+$/.test(normalized)' in body
         assert '!Number.isSafeInteger(accountId) || accountId <= 0' in body
-        assert 'Please enter a positive integer account ID.' in body
+        assert '请输入正确的正整数账户ID。' in body
         assert "'/social/relationships'" in body
         assert '`/social/search?account_id=${encodeURIComponent(accountId)}`' in body
         assert '`/social/follow/${accountId}`' in body
         assert 'function renderSearchFailure(message, searchedAccountId)' in body
-        assert 'Failed to search account. Please try again later.' in body
-        assert "renderSearchFailure(error.message || 'Failed to search account. Please try again later.', accountId);" in body
+        assert '搜索账户失败，请稍后再试。' in body
+        assert "renderSearchFailure(error.message || '搜索账户失败，请稍后再试。', accountId);" in body
         assert 'await loadRelationships();' in body
         assert 'await runSearch(socialState.lastSearchedAccountId);' in body
         assert "const successMessage = action === 'unfollow' ? '\\u5df2\\u53d6\\u6d88\\u5173\\u6ce8' : '\\u5173\\u6ce8\\u6210\\u529f';" in body
-        assert "showToast(error.message || 'Failed to search account.', true);" in body
-        assert "showToast(error.message || 'Failed to update follow state.', true);" in body
+        assert "showToast(error.message || '搜索账户失败。', true);" in body
+        assert "showToast(error.message || '更新关注状态失败。', true);" in body
     finally:
         client.close()
         harness.close()

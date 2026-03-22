@@ -58,21 +58,21 @@ def _get_invitee_account_or_error(db: Session, *, invitee_account_id: int) -> mo
         .first()
     )
     if account is None:
-        raise ProjectInviteValidationError("Invite target account is not eligible.")
+        raise ProjectInviteValidationError("被邀请账户不可用。")
     if account.is_super_account:
-        raise ProjectInviteValidationError("Invite target account is not eligible.")
+        raise ProjectInviteValidationError("被邀请账户不可用。")
     if not account.is_active:
-        raise ProjectInviteValidationError("Invite target account is not eligible.")
+        raise ProjectInviteValidationError("被邀请账户不可用。")
     if account.registration_status != "active":
-        raise ProjectInviteValidationError("Invite target account is not eligible.")
+        raise ProjectInviteValidationError("被邀请账户不可用。")
     if account.email_verified_at is None:
-        raise ProjectInviteValidationError("Invite target account is not eligible.")
+        raise ProjectInviteValidationError("被邀请账户不可用。")
     if account.member is None or account.member_id is None:
-        raise ProjectInviteValidationError("Invite target account is not eligible.")
+        raise ProjectInviteValidationError("被邀请账户不可用。")
     if not account.member.is_active:
-        raise ProjectInviteValidationError("Invite target account is not eligible.")
+        raise ProjectInviteValidationError("被邀请账户不可用。")
     if bool(getattr(account.member, "is_virtual_identity", False)):
-        raise ProjectInviteValidationError("Invite target account is not eligible.")
+        raise ProjectInviteValidationError("被邀请账户不可用。")
     return account
 
 
@@ -87,7 +87,7 @@ def _get_invite_or_error(db: Session, *, invite_id: int) -> models.ProjectInvite
         .first()
     )
     if invite is None:
-        raise ProjectInviteNotFoundError("Project invite not found.")
+        raise ProjectInviteNotFoundError("未找到该项目邀请。")
     return invite
 
 
@@ -99,12 +99,12 @@ def create_project_invite(
     invitee_account_id: int,
 ) -> models.ProjectInvite:
     if inviter_account_id == invitee_account_id:
-        raise ProjectInviteValidationError("Users cannot invite themselves.")
+        raise ProjectInviteValidationError("不能邀请自己加入项目。")
 
     invitee_account = _get_invitee_account_or_error(db, invitee_account_id=invitee_account_id)
 
     if any(member.id == invitee_account.member_id for member in project.members):
-        raise ProjectInviteValidationError("Invitee is already a project member.")
+        raise ProjectInviteValidationError("对方已经是项目成员。")
 
     duplicate_pending_invite = (
         db.query(models.ProjectInvite)
@@ -116,7 +116,7 @@ def create_project_invite(
         .first()
     )
     if duplicate_pending_invite is not None:
-        raise ProjectInviteValidationError("A pending invite already exists for this account.")
+        raise ProjectInviteValidationError("该账户已存在待处理的项目邀请。")
 
     invite = models.ProjectInvite(
         project_id=project.id,
@@ -139,7 +139,7 @@ def create_project_invite(
             .first()
         )
         if duplicate_pending_invite is not None:
-            raise ProjectInviteValidationError("A pending invite already exists for this account.") from exc
+            raise ProjectInviteValidationError("该账户已存在待处理的项目邀请。") from exc
         raise
     db.refresh(invite)
     return invite
@@ -215,9 +215,9 @@ def accept_project_invite(
 ) -> models.ProjectInvite:
     invite = _get_invite_or_error(db, invite_id=invite_id)
     if invite.invitee_account_id != actor_account_id:
-        raise ProjectInvitePermissionError("Only the invitee can accept this invite.")
+        raise ProjectInvitePermissionError("只有被邀请人才能接受该邀请。")
     if invite.status != PENDING_STATUS:
-        raise ProjectInviteStateError("Only pending invites can be accepted.")
+        raise ProjectInviteStateError("只有待处理的邀请才能被接受。")
 
     current_invitee_account = (
         db.query(models.Account)
@@ -233,12 +233,12 @@ def accept_project_invite(
         invite.resolved_at = datetime.now()
         db.commit()
         db.refresh(invite)
-        raise ProjectInviteStateError("Invite is no longer actionable.")
+        raise ProjectInviteStateError("该邀请已失效，无法继续处理。")
 
     invitee_account = _get_invitee_account_or_error(db, invitee_account_id=invite.invitee_account_id)
     invitee_member = invitee_account.member
     if invitee_member is None:
-        raise ProjectInviteValidationError("Invite target account is not eligible.")
+        raise ProjectInviteValidationError("被邀请账户不可用。")
 
     invite.status = ACCEPTED_STATUS
     invite.resolved_at = datetime.now()
@@ -263,7 +263,7 @@ def accept_project_invite(
             refreshed_invite.resolved_at = datetime.now()
             db.commit()
             db.refresh(refreshed_invite)
-            raise ProjectInviteStateError("Invite is no longer actionable.") from exc
+            raise ProjectInviteStateError("该邀请已失效，无法继续处理。") from exc
         raise
     db.refresh(invite)
     return invite
@@ -277,9 +277,9 @@ def reject_project_invite(
 ) -> models.ProjectInvite:
     invite = _get_invite_or_error(db, invite_id=invite_id)
     if invite.invitee_account_id != actor_account_id:
-        raise ProjectInvitePermissionError("Only the invitee can reject this invite.")
+        raise ProjectInvitePermissionError("只有被邀请人才能拒绝该邀请。")
     if invite.status != PENDING_STATUS:
-        raise ProjectInviteStateError("Only pending invites can be rejected.")
+        raise ProjectInviteStateError("只有待处理的邀请才能被拒绝。")
 
     invite.status = REJECTED_STATUS
     invite.resolved_at = datetime.now()
